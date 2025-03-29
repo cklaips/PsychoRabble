@@ -255,18 +255,17 @@ interface WordItem {
       h2 {
         color: #2c3e50;
         margin-bottom: 1rem;
-        font-size: 1.2rem;
       }
 
       ul {
-        list-style-type: none;
+        list-style: none;
         padding: 0;
         margin: 0;
 
         li {
-          padding: 0.75rem;
+          padding: 0.5rem;
           border-bottom: 1px solid #e9ecef;
-          color: #495057;
+          color: #2c3e50;
 
           &:last-child {
             border-bottom: none;
@@ -287,15 +286,10 @@ export class RoomViewComponent implements OnInit {
     { text: 'over', used: false },
     { text: 'lazy', used: false },
     { text: 'dog', used: false },
-    { text: 'In', used: false },
-    { text: 'a', used: false },
-    { text: 'world', used: false },
-    { text: 'full', used: false },
-    { text: 'of', used: false },
-    { text: 'possibilities', used: false },
-    { text: 'dreams', used: false },
-    { text: 'come', used: false },
-    { text: 'true', used: false }
+    { text: 'in', used: false },
+    { text: 'the', used: false },
+    { text: 'park', used: false },
+    { text: 'today', used: false }
   ];
   sentenceWords: string[] = [];
   hoverIndex: number | null = null;
@@ -305,14 +299,18 @@ export class RoomViewComponent implements OnInit {
   constructor(private route: ActivatedRoute) {}
 
   ngOnInit() {
-    const roomId = this.route.snapshot.paramMap.get('id');
-    this.room = {
-      serverName: 'Room ' + roomId,
-      players: '0/10',
-      zip: '00000',
-      color: 'Gray',
-      playerNames: ['Player 1', 'Player 2', 'Player 3']
-    };
+    this.route.params.subscribe(params => {
+      const roomName = params['roomName'];
+      // In a real app, you would fetch the room data from a service
+      // For now, we'll use mock data
+      this.room = {
+        serverName: roomName,
+        players: '2/6',
+        zip: '85001',
+        color: 'Purple',
+        playerNames: ['Player1', 'Player2']
+      };
+    });
   }
 
   onDragStart(event: DragEvent, word: WordItem) {
@@ -339,6 +337,13 @@ export class RoomViewComponent implements OnInit {
     if (event.dataTransfer) {
       event.dataTransfer.setData('text/plain', word);
       event.dataTransfer.effectAllowed = 'move';
+      // Remove the word from the sentence
+      this.sentenceWords.splice(index, 1);
+      // Add it back to available words
+      const wordItem = this.availableWords.find(w => w.text === word);
+      if (wordItem) {
+        wordItem.used = false;
+      }
     }
   }
 
@@ -347,6 +352,31 @@ export class RoomViewComponent implements OnInit {
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'move';
     }
+
+    // Calculate hover position
+    const container = event.currentTarget as HTMLElement;
+    const containerRect = container.getBoundingClientRect();
+    const relativeX = event.clientX - containerRect.left;
+
+    // Get all word elements
+    const wordElements = container.getElementsByClassName('sentence-word');
+    let insertIndex = this.sentenceWords.length; // Default to end
+
+    // Find the insertion point
+    for (let i = 0; i < wordElements.length; i++) {
+      const wordElement = wordElements[i] as HTMLElement;
+      const wordRect = wordElement.getBoundingClientRect();
+      const wordLeft = wordRect.left - containerRect.left;
+      const wordRight = wordRect.right - containerRect.left;
+
+      // If we're before the middle of the current word
+      if (relativeX < (wordLeft + wordRight) / 2) {
+        insertIndex = i;
+        break;
+      }
+    }
+
+    this.hoverIndex = insertIndex;
   }
 
   onDragLeave(event: DragEvent) {
@@ -365,30 +395,12 @@ export class RoomViewComponent implements OnInit {
     const word = this.availableWords.find(w => w.text === text);
     if (!word) return;
 
-    // Only mark as used if it's a new word being dropped
-    if (!word.isDraggedFromSentence) {
-      word.used = true;
-    }
+    // Mark the word as used when it's added to the sentence
+    word.used = true;
 
-    // Calculate drop position
-    const dropTarget = event.target as HTMLElement;
-    const sentenceContainer = dropTarget.closest('.sentence-container');
-    if (!sentenceContainer) return;
-
-    const rect = sentenceContainer.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const words = sentenceContainer.querySelectorAll('.sentence-word');
-    let insertIndex = this.sentenceWords.length;
-
-    // Find the insertion point based on mouse position
-    words.forEach((wordElement, index) => {
-      const wordRect = wordElement.getBoundingClientRect();
-      const wordCenter = wordRect.left + wordRect.width / 2 - rect.left;
-      if (x < wordCenter) {
-        insertIndex = index;
-      }
-    });
-
+    // Use the hoverIndex for insertion since it's already calculated in onDragOver
+    const insertIndex = this.hoverIndex !== null ? this.hoverIndex : this.sentenceWords.length;
+    
     // Insert the word at the calculated position
     this.sentenceWords.splice(insertIndex, 0, text);
     this.hoverIndex = null;
@@ -397,17 +409,7 @@ export class RoomViewComponent implements OnInit {
   removeWord(index: number) {
     const word = this.sentenceWords[index];
     this.sentenceWords.splice(index, 1);
-    this.markWordAsUnused(word);
-  }
-
-  private markWordAsUsed(word: string) {
-    const wordItem = this.availableWords.find(w => w.text === word);
-    if (wordItem) {
-      wordItem.used = true;
-    }
-  }
-
-  private markWordAsUnused(word: string) {
+    // Add the word back to available words
     const wordItem = this.availableWords.find(w => w.text === word);
     if (wordItem) {
       wordItem.used = false;
