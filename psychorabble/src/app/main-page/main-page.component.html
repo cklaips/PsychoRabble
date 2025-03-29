@@ -1,0 +1,48 @@
+<div class="container">
+  <div class="header">
+    <div class="title-section">
+      <h1>Available Rooms</h1>
+      <p class="player-name">Welcome, {{ playerName }}!</p>
+    </div>
+    <div class="button-group">
+      <button class="create-btn" (click)="onCreateClick()">Create Room</button>
+      <button class="join-btn" (click)="onJoinClick()" [disabled]="!selectedItem">Join Room</button>
+      <button class="logout-btn" (click)="onLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="data-list">
+    <div class="list-header">
+      <div class="header-item">Server Name</div>
+      <div class="header-item">Players</div>
+      <div class="header-item">Zip</div>
+      <div class="header-item">Color</div>
+    </div>
+    <div class="list-content">
+      <div 
+        *ngFor="let item of dataItems" 
+        class="list-item"
+        [class.selected]="selectedItem === item"
+        (click)="onItemClick(item)"
+      >
+        <div class="item-main">
+          <div class="item-cell">{{ item.serverName }}</div>
+          <div class="item-cell">{{ item.players }}</div>
+          <div class="item-cell">{{ item.zip }}</div>
+          <div class="item-cell">
+            <span class="color-dot" [style.background-color]="item.color"></span>
+            {{ item.color }}
+          </div>
+        </div>
+        <div class="item-details" *ngIf="expandedItem === item">
+          <div class="player-list">
+            <h3>Players in this server:</h3>
+            <ul>
+              <li *ngFor="let player of item.playerNames">{{ player }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

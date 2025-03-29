@@ -1,0 +1,29 @@
+<div class="container">
+  <div class="header">
+    <h1>Psychorabble</h1>
+    <div class="button-group">
+      <button class="create-btn" (click)="onCreateClick()">Create</button>
+      <button class="join-btn" (click)="onJoinClick()">Join</button>
+    </div>
+  </div>
+
+  <div class="data-list">
+    <div class="list-header">
+      <div class="header-item">City</div>
+      <div class="header-item">State</div>
+      <div class="header-item">ZIP</div>
+      <div class="header-item">Color</div>
+    </div>
+    <div class="list-content">
+      <div class="list-item" *ngFor="let item of dataItems">
+        <div class="item-cell">{{ item.city }}</div>
+        <div class="item-cell">{{ item.state }}</div>
+        <div class="item-cell">{{ item.zip }}</div>
+        <div class="item-cell">
+          <span class="color-dot" [style.background-color]="item.color"></span>
+          {{ item.color }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 
