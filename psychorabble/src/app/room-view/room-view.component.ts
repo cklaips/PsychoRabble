@@ -316,83 +316,37 @@ export class RoomViewComponent implements OnInit {
   }
 
   onDragStart(event: DragEvent, word: WordItem) {
+    if (word.used) {
+      event.preventDefault();
+      return;
+    }
+    this.draggedWord = word;
     if (event.dataTransfer) {
       event.dataTransfer.setData('text/plain', word.text);
-      this.draggedWord = word;
-      // Hide the word immediately when dragging starts
-      word.used = true;
-
-      // Create a transparent drag image
-      const dragImage = document.createElement('div');
-      dragImage.style.backgroundColor = '#3498db';
-      dragImage.style.color = 'white';
-      dragImage.style.padding = '0.5rem 1rem';
-      dragImage.style.borderRadius = '20px';
-      dragImage.style.position = 'absolute';
-      dragImage.style.top = '-1000px';
-      dragImage.textContent = word.text;
-      document.body.appendChild(dragImage);
-      event.dataTransfer.setDragImage(dragImage, 0, 0);
-      setTimeout(() => document.body.removeChild(dragImage), 0);
+      event.dataTransfer.effectAllowed = 'move';
     }
   }
 
   onDragEnd(event: DragEvent) {
-    // If the word wasn't dropped in the sentence, show it in the original list
-    if (this.draggedWord) {
-      this.draggedWord.used = false;
-      this.draggedWord = null;
+    // Only mark as used if the word was actually dropped
+    if (this.draggedWord && event.dataTransfer?.dropEffect === 'move') {
+      this.draggedWord.used = true;
     }
+    this.draggedWord = null;
   }
 
   onSentenceWordDragStart(event: DragEvent, word: string, index: number) {
     if (event.dataTransfer) {
       event.dataTransfer.setData('text/plain', word);
-      // Remove the word from the sentence when starting to drag
-      this.sentenceWords.splice(index, 1);
-      // Add the word to available words with a special flag
-      this.availableWords.push({ text: word, used: false, isDraggedFromSentence: true });
-
-      // Create a transparent drag image
-      const dragImage = document.createElement('div');
-      dragImage.style.backgroundColor = '#2ecc71';
-      dragImage.style.color = 'white';
-      dragImage.style.padding = '0.5rem 1rem';
-      dragImage.style.borderRadius = '20px';
-      dragImage.style.position = 'absolute';
-      dragImage.style.top = '-1000px';
-      dragImage.textContent = word;
-      document.body.appendChild(dragImage);
-      event.dataTransfer.setDragImage(dragImage, 0, 0);
-      setTimeout(() => document.body.removeChild(dragImage), 0);
+      event.dataTransfer.effectAllowed = 'move';
     }
   }
 
   onDragOver(event: DragEvent) {
     event.preventDefault();
-    const container = event.currentTarget as HTMLElement;
-    const containerRect = container.getBoundingClientRect();
-    const relativeX = event.clientX - containerRect.left;
-
-    // Get all word elements
-    const wordElements = container.getElementsByClassName('sentence-word');
-    let insertIndex = this.sentenceWords.length; // Default to end
-
-    // Find the insertion point
-    for (let i = 0; i < wordElements.length; i++) {
-      const wordElement = wordElements[i] as HTMLElement;
-      const wordRect = wordElement.getBoundingClientRect();
-      const wordLeft = wordRect.left - containerRect.left;
-      const wordRight = wordRect.right - containerRect.left;
-
-      // If we're before the middle of the current word
-      if (relativeX < (wordLeft + wordRight) / 2) {
-        insertIndex = i;
-        break;
-      }
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
     }
-
-    this.hoverIndex = insertIndex;
   }
 
   onDragLeave(event: DragEvent) {
@@ -402,46 +356,42 @@ export class RoomViewComponent implements OnInit {
 
   onDrop(event: DragEvent) {
     event.preventDefault();
-    this.hoverIndex = null;
-    if (event.dataTransfer) {
-      const word = event.dataTransfer.getData('text/plain');
-      const dropX = event.clientX;
-      const container = event.currentTarget as HTMLElement;
-      const containerRect = container.getBoundingClientRect();
-      const relativeX = dropX - containerRect.left;
+    if (!event.dataTransfer) return;
 
-      // Get all word elements
-      const wordElements = container.getElementsByClassName('sentence-word');
-      let insertIndex = this.sentenceWords.length; // Default to end
+    const text = event.dataTransfer.getData('text/plain');
+    if (!text) return;
 
-      // Find the insertion point
-      for (let i = 0; i < wordElements.length; i++) {
-        const wordElement = wordElements[i] as HTMLElement;
-        const wordRect = wordElement.getBoundingClientRect();
-        const wordLeft = wordRect.left - containerRect.left;
-        const wordRight = wordRect.right - containerRect.left;
+    // Find the word in available words
+    const word = this.availableWords.find(w => w.text === text);
+    if (!word) return;
 
-        // If we're before the middle of the current word
-        if (relativeX < (wordLeft + wordRight) / 2) {
-          insertIndex = i;
-          break;
-        }
-      }
-
-      // Insert the word at the calculated position
-      this.sentenceWords.splice(insertIndex, 0, word);
-      
-      // Handle the dragged word
-      if (this.draggedWord) {
-        // If it was dragged from sentence, remove it from available words
-        const wordIndex = this.availableWords.findIndex(w => w.text === word && w.isDraggedFromSentence);
-        if (wordIndex !== -1) {
-          this.availableWords.splice(wordIndex, 1);
-        }
-        // Keep the word hidden since it's now in the sentence
-        this.draggedWord = null;
-      }
+    // Only mark as used if it's a new word being dropped
+    if (!word.isDraggedFromSentence) {
+      word.used = true;
     }
+
+    // Calculate drop position
+    const dropTarget = event.target as HTMLElement;
+    const sentenceContainer = dropTarget.closest('.sentence-container');
+    if (!sentenceContainer) return;
+
+    const rect = sentenceContainer.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const words = sentenceContainer.querySelectorAll('.sentence-word');
+    let insertIndex = this.sentenceWords.length;
+
+    // Find the insertion point based on mouse position
+    words.forEach((wordElement, index) => {
+      const wordRect = wordElement.getBoundingClientRect();
+      const wordCenter = wordRect.left + wordRect.width / 2 - rect.left;
+      if (x < wordCenter) {
+        insertIndex = index;
+      }
+    });
+
+    // Insert the word at the calculated position
+    this.sentenceWords.splice(insertIndex, 0, text);
+    this.hoverIndex = null;
   }
 
   removeWord(index: number) {
