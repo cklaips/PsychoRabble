@@ -105,10 +105,11 @@ export class NameEntryComponent {
 
   onSubmit() {
     if (this.playerName.trim()) {
-      // Store the player name in localStorage
-      localStorage.setItem('playerName', this.playerName.trim());
-      // Navigate to the main page
-      this.router.navigate(['/rooms']);
+      const nameToSave = this.playerName.trim();
+      // Store the player name in localStorage (can still be useful)
+      localStorage.setItem('playerName', nameToSave);
+      // Navigate to the main page, passing the name via state
+      this.router.navigate(['/rooms'], { state: { playerName: nameToSave } });
     }
   }
-} 
+}

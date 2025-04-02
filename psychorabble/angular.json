@@ -67,7 +67,8 @@
               "buildTarget": "psychorabble:build:production"
             },
             "development": {
-              "buildTarget": "psychorabble:build:development"
+              "buildTarget": "psychorabble:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

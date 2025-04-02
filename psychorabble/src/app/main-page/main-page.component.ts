@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { DataItem } from '../data.interface';
+import { RoomInfo } from '../data.interface'; // Use RoomInfo
+import { SignalRService } from '../services/signalr.service'; // Import SignalRService
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-main-page',
@@ -11,78 +13,82 @@ import { DataItem } from '../data.interface';
   templateUrl: './main-page.component.html',
   styleUrls: ['./main-page.component.scss']
 })
-export class MainPageComponent implements OnInit {
+export class MainPageComponent implements OnInit, OnDestroy {
   playerName: string = '';
+  availableRooms: RoomInfo[] = []; // Use RoomInfo array
+  selectedRoom: RoomInfo | null = null; // Use RoomInfo
+  expandedItem: RoomInfo | null = null; // Use RoomInfo
+  newRoomName: string = ''; // For creating new rooms
 
-  dataItems: DataItem[] = [
-    { 
-      serverName: 'Casual Game Room', 
-      players: '6/9', 
-      zip: '10001', 
-      color: 'Blue',
-      playerNames: ['Player1', 'Player2', 'Player3', 'Player4', 'Player5', 'Player6']
-    },
-    { 
-      serverName: 'Competitive Arena', 
-      players: '8/10', 
-      zip: '90001', 
-      color: 'Red',
-      playerNames: ['Pro1', 'Pro2', 'Pro3', 'Pro4', 'Pro5', 'Pro6', 'Pro7', 'Pro8']
-    },
-    { 
-      serverName: 'Beginner Friendly', 
-      players: '3/8', 
-      zip: '60601', 
-      color: 'Green',
-      playerNames: ['Newbie1', 'Newbie2', 'Newbie3']
-    },
-    { 
-      serverName: 'Pro League', 
-      players: '9/10', 
-      zip: '77001', 
-      color: 'Yellow',
-      playerNames: ['Elite1', 'Elite2', 'Elite3', 'Elite4', 'Elite5', 'Elite6', 'Elite7', 'Elite8', 'Elite9']
-    },
-    { 
-      serverName: 'Training Grounds', 
-      players: '2/6', 
-      zip: '85001', 
-      color: 'Purple',
-      playerNames: ['Trainee1', 'Trainee2']
-    }
-  ];
+  private roomsSubscription?: Subscription;
 
-  selectedItem: DataItem | null = null;
-  expandedItem: DataItem | null = null;
-
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router,
+    private signalRService: SignalRService // Inject SignalRService
+  ) {}
 
   ngOnInit() {
     this.playerName = localStorage.getItem('playerName') || '';
     if (!this.playerName) {
-      this.router.navigate(['/']);
+      // Redirect to name entry if player name is not set
+      this.router.navigate(['/']); 
+      return;
+    }
+
+    // Subscribe to available rooms updates
+    this.roomsSubscription = this.signalRService.getAvailableRoomsObservable().subscribe((rooms: RoomInfo[]) => {
+      this.availableRooms = rooms;
+    });
+
+    // No need to fetch initial list here, service handles it after connection
+    // and the subscription above will receive the update.
+  }
+
+  ngOnDestroy() {
+    this.roomsSubscription?.unsubscribe();
+  }
+
+  async onCreateClick() {
+    if (!this.newRoomName || !this.playerName) return;
+    try {
+      await this.signalRService.createRoom(this.newRoomName);
+      // After creating, join the room
+      await this.signalRService.joinRoom(this.newRoomName, this.playerName);
+      // Navigate to the newly created room
+      this.router.navigate(['/room', this.newRoomName]);
+      this.newRoomName = ''; // Clear input
+    } catch (error) {
+      console.error('Error creating or joining room:', error);
+      // Handle error (e.g., show message to user)
     }
   }
 
-  onCreateClick() {
-    console.log('Create button clicked');
-  }
-
-  onJoinClick() {
-    if (this.selectedItem) {
-      // Navigate to the room view with the selected item's index as the ID
-      const roomId = this.dataItems.indexOf(this.selectedItem);
-      this.router.navigate(['/room', roomId]);
+  async onJoinClick() {
+    if (this.selectedRoom && this.playerName) {
+      try {
+        await this.signalRService.joinRoom(this.selectedRoom.name, this.playerName);
+        // Navigate after successful join
+        this.router.navigate(['/room', this.selectedRoom.name]);
+      } catch (error) {
+        console.error('Error joining room:', error);
+         // Handle error (e.g., show message to user if room is full or name taken)
+      }
     }
   }
 
-  onItemClick(item: DataItem) {
-    this.selectedItem = item;
-    this.expandedItem = this.expandedItem === item ? null : item;
+  onItemClick(room: RoomInfo) { // Parameter is RoomInfo
+    this.selectedRoom = room;
+    this.expandedItem = this.expandedItem === room ? null : room;
   }
 
   onLogout() {
     localStorage.removeItem('playerName');
+    // Optionally call signalRService.leaveRoom() if connected
     this.router.navigate(['/']);
+  }
+
+  // Helper to display player count
+  getPlayerCount(room: RoomInfo): string {
+    return `${room.players.length}/${room.maxPlayers}`;
   }
 }

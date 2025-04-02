@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PsychoRabble.API", "PsychoRabble.API\PsychoRabble.API.csproj", "{4831F573-3487-13B0-1B7B-3D5B8A7E634F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4831F573-3487-13B0-1B7B-3D5B8A7E634F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4831F573-3487-13B0-1B7B-3D5B8A7E634F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4831F573-3487-13B0-1B7B-3D5B8A7E634F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4831F573-3487-13B0-1B7B-3D5B8A7E634F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C7618FDB-BD67-42C3-9314-A8467D727EC3}
+	EndGlobalSection
+EndGlobal
