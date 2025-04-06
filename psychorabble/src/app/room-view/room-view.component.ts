@@ -10,7 +10,7 @@ import { VotingComponent } from '../voting/voting.component';
 interface WordItem {
   text: string;
   used: boolean;
-  isDraggedFromSentence?: boolean; // This might not be needed anymore
+  isDraggedFromSentence?: boolean;
 }
 
 @Component({
@@ -34,7 +34,9 @@ interface WordItem {
               <div 
                 *ngFor="let word of availableWords" 
                 class="word-item"
-                [class.hidden]="word.used" 
+                [class.used]="word.used"
+                [class.hidden]="word.used"
+                [class.dragged-from-sentence]="word.isDraggedFromSentence"
                 draggable="true"
                 (dragstart)="onDragStart($event, word)"
                 (dragend)="onDragEnd($event)" 
@@ -142,22 +144,22 @@ interface WordItem {
     .header {
       margin-bottom: 2rem;
       text-align: center;
-      position: relative; 
+      position: relative; /* Added for button positioning */
 
       h1 {
         margin: 0;
         color: #2c3e50;
         font-size: 2.5rem;
-        display: inline-block; 
-        margin-right: 1rem; 
+        display: inline-block; /* Allow button beside it */
+        margin-right: 1rem; /* Space for button */
       }
-      .current-player-name { 
+      .current-player-name { /* Style for name display */
           font-size: 0.9rem;
           color: #555;
           margin-left: 10px;
           font-style: italic;
       }
-       .leave-button { 
+       .leave-button { /* Style for the leave button */
         padding: 0.5rem 1rem;
         background-color: #e74c3c;
         color: white;
@@ -165,9 +167,9 @@ interface WordItem {
         border-radius: 5px;
         cursor: pointer;
         font-size: 0.9rem;
-        position: absolute; 
-        top: 10px; 
-        right: 10px; 
+        position: absolute; /* Position relative to header */
+        top: 10px; /* Adjust as needed */
+        right: 10px; /* Adjust as needed */
         transition: background-color 0.3s ease;
 
         &:hover {
@@ -176,7 +178,7 @@ interface WordItem {
       }
     }
 
-    .name-entry { 
+    .name-entry { /* Keep styles even if element removed from this template */
       display: flex;
       justify-content: center;
       align-items: center;
@@ -239,7 +241,7 @@ interface WordItem {
       border-radius: 20px;
       cursor: move;
       user-select: none;
-      transition: opacity 0.3s ease, visibility 0.3s ease; /* Added transition */
+      transition: all 0.3s ease;
       opacity: 1;
       visibility: visible;
 
@@ -247,12 +249,22 @@ interface WordItem {
         background-color: #2980b9;
       }
 
-      &.hidden { /* Renamed from .used for clarity */
+      &.used {
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
       }
-      /* Removed .dragging and .dragged-from-sentence */
+
+      &.dragged-from-sentence {
+        background-color: #3498db;
+        transform: scale(0.9);
+        opacity: 0.8;
+      }
+      
+      &.dragging { /* Style for the word being actively dragged */
+        opacity: 0; /* Hide the original element completely */
+        visibility: hidden; 
+      }
     }
 
     .sentence-area {
@@ -284,7 +296,6 @@ interface WordItem {
       gap: 0.5rem;
       position: relative;
       transition: all 0.3s ease;
-      cursor: move; /* Add move cursor */
 
       &.shift-right {
         transform: translateX(1rem);
@@ -299,6 +310,11 @@ interface WordItem {
           opacity: 0.8;
         }
       }
+      
+      &.dragging { /* Add dragging style for sentence words too */
+        opacity: 0; 
+        visibility: hidden; 
+      }
     }
 
     .sentence-controls {
@@ -309,7 +325,7 @@ interface WordItem {
       align-items: center;
     }
 
-    .submit-button, .ready-button { 
+    .submit-button, .ready-button { /* Shared styles */
       background-color: #3498db;
       color: white;
       border: none;
@@ -328,7 +344,7 @@ interface WordItem {
         cursor: not-allowed;
       }
     }
-     .ready-button { 
+     .ready-button { /* Specific styles */
         background-color: #2ecc71; 
          &:hover:not(:disabled) {
             background-color: #27ae60;
@@ -372,7 +388,7 @@ interface WordItem {
           &:last-child {
             border-bottom: none;
           }
-          .submitted-check, .ready-check { 
+          .submitted-check, .ready-check { /* Combined styles */
             color: green;
             font-weight: bold;
             margin-left: 5px;
@@ -380,7 +396,7 @@ interface WordItem {
         }
       }
     }
-    .voting-area, .results-area { 
+    .voting-area, .results-area { /* Basic styling for voting/results area */
        flex: 1;
        background-color: white;
        border-radius: 12px;
@@ -403,12 +419,8 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   ];
   sentenceWords: string[] = [];
   hoverIndex: number | null = null;
-  // Remove draggedWord and draggedSentenceWordIndex properties as they are handled differently now
-  // draggedWord: WordItem | null = null; 
-  // draggedSentenceWordIndex: number | null = null; 
-  draggedWordText: string | null = null; // Store text of dragged item
-  isDraggingFromSentence: boolean = false; // Flag if drag started from sentence
-
+  draggedWord: WordItem | null = null; // Word dragged from bank
+  draggedSentenceWordIndex: number | null = null; // Index of word dragged from sentence
   generatedSentence: string = '';
   private playersSubscription?: Subscription;
   private routeSubscription?: Subscription; 
@@ -428,6 +440,7 @@ export class RoomViewComponent implements OnInit, OnDestroy {
             this.playerName = name;
             console.log(`Player name set by service: ${this.playerName}`);
         } else {
+             // Fallback if name not received from service (e.g., refresh before JoinedRoom event)
              this.playerName = localStorage.getItem('playerName') || 'UnknownPlayer';
              console.warn(`Player name retrieved from localStorage as fallback: ${this.playerName}`);
         }
@@ -438,7 +451,10 @@ export class RoomViewComponent implements OnInit, OnDestroy {
       this.roomName = params['id']; 
       if (!this.roomName) {
            console.error("Room name missing on init.");
+           // Redirect? this.router.navigate(['/']); 
       } else {
+          // Fetch initial game state for the room upon loading.
+          // Note: Player should already be joined from MainPageComponent
           this.signalRService.getGameState().then(state => {
               this.gameState = state;
               if (state) {
@@ -452,19 +468,21 @@ export class RoomViewComponent implements OnInit, OnDestroy {
       this.players = players;
     });
 
-    // Subscribe to GameState updates
+    // Subscribe to GameState updates (initial state also pushed by JoinedRoom handler in service)
     this.gameStateSubscription = this.signalRService.getGameStateObservable().subscribe(state => {
-        console.log("GameState updated:", state); 
+        console.log("GameState updated:", state); // Log state updates
         this.gameState = state;
         if (state) {
             this.updateAvailableWords(state.availableWords);
+            // Reset sentence if phase changed back to SUBMITTING
             if (state.currentPhase === 'SUBMITTING') {
                 this.sentenceWords = [];
                 this.generatedSentence = '';
+                // Reset available words as well for the new round
                 this.updateAvailableWords(state.availableWords); 
             }
         } else {
-             this.sentenceWords = []; 
+             this.sentenceWords = []; // Clear sentence on state reset
              this.generatedSentence = '';
         }
     });
@@ -475,12 +493,14 @@ export class RoomViewComponent implements OnInit, OnDestroy {
     this.routeSubscription?.unsubscribe(); 
     this.gameStateSubscription?.unsubscribe(); 
     this.playerNameSubscription?.unsubscribe(); 
+    // Call leaveRoom when the component is destroyed
     this.signalRService.leaveRoom().catch(err => console.error("Error leaving room on destroy:", err));
   }
 
+  // Add word to sentence on double-click
   addWordToSentence(word: WordItem) {
     if (!word.used) {
-      word.used = true; // Mark as used in the available list
+      word.used = true;
       this.sentenceWords.push(word.text);
     }
   }
@@ -494,55 +514,66 @@ export class RoomViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Drag from Word Bank
   onDragStart(event: DragEvent, word: WordItem) {
     if (word.used) {
       event.preventDefault();
       return;
     }
-    this.isDraggingFromSentence = false;
-    this.draggedWordText = word.text; 
-    // Mark as used immediately for visual feedback
-    word.used = true; 
+    // Add dragging class to the source element
+    (event.target as HTMLElement).classList.add('dragging');
+
+    this.draggedWord = word;
+    this.draggedSentenceWordIndex = null; // Clear sentence drag state
     if (event.dataTransfer) {
       event.dataTransfer.setData('text/plain', word.text);
       event.dataTransfer.effectAllowed = 'move';
     }
   }
 
-  // Drag from Sentence Area
-  onSentenceWordDragStart(event: DragEvent, word: string, index: number) {
-     this.isDraggingFromSentence = true;
-     this.draggedWordText = word; 
-     // Find the corresponding item in availableWords and mark it used (it should be already, but just in case)
-     const wordItem = this.availableWords.find(w => w.text === word);
-     if (wordItem) wordItem.used = true; 
-     
-     // Remove from sentence array immediately for visual feedback during drag
-     this.sentenceWords.splice(index, 1); 
-
-     if (event.dataTransfer) {
-       event.dataTransfer.setData('text/plain', word);
-       event.dataTransfer.effectAllowed = 'move';
-     }
-  }
-
   onDragEnd(event: DragEvent) {
-    // If drag failed (not dropped in a valid zone)
-    if (event.dataTransfer?.dropEffect !== 'move' && this.draggedWordText) {
-       // Find the word in availableWords and mark it as unused
-       const wordItem = this.availableWords.find(w => w.text === this.draggedWordText);
-       if (wordItem) {
-           wordItem.used = false;
-       }
-       // If it was dragged from the sentence, it was already removed in onSentenceWordDragStart,
-       // so setting used=false makes it available again correctly.
+     // Remove dragging class from the source element
+    (event.target as HTMLElement).classList.remove('dragging');
+
+    // If a drag from the sentence was started but not successfully dropped in onDrop,
+    // return the word to the available list.
+    if (this.draggedSentenceWordIndex !== null && event.dataTransfer?.dropEffect !== 'move') { 
+        // Word was dragged from sentence but dropped outside target
+        // Check if index is valid before accessing sentenceWords
+        if (this.draggedSentenceWordIndex !== null && this.draggedSentenceWordIndex >= 0 && this.draggedSentenceWordIndex < this.sentenceWords.length) {
+            const wordText = this.sentenceWords[this.draggedSentenceWordIndex]; 
+            // Remove from sentence FIRST
+            this.sentenceWords.splice(this.draggedSentenceWordIndex, 1); 
+            // Then make it available again
+            if (wordText) {
+                const wordItem = this.availableWords.find(w => w.text === wordText);
+                if (wordItem) {
+                    wordItem.used = false; 
+                }
+            }
+        } else if (this.draggedSentenceWordIndex !== null) { // Index might be invalid if array changed mid-drag? Log warning.
+             console.warn("draggedSentenceWordIndex was invalid or null in onDragEnd during sentence drag cleanup.");
+        }
+    } 
+    // If a drag from the bank was started but not successfully dropped
+    else if (this.draggedWord && event.dataTransfer?.dropEffect !== 'move') {
+       this.draggedWord.used = false; 
     }
-    // Clear drag state
-    this.draggedWordText = null; 
-    this.isDraggingFromSentence = false;
+    
+    // Clear drag state regardless of success
+    this.draggedWord = null; 
+    this.draggedSentenceWordIndex = null; 
   }
 
+  onSentenceWordDragStart(event: DragEvent, word: string, index: number) {
+    if (event.dataTransfer) {
+      event.dataTransfer.setData('text/plain', word);
+      event.dataTransfer.effectAllowed = 'move';
+      this.draggedSentenceWordIndex = index; // Store index
+      this.draggedWord = null; // Clear bank drag state
+       // Add dragging class to the source element
+      (event.target as HTMLElement).classList.add('dragging');
+    }
+  }
 
   onDragOver(event: DragEvent) {
     event.preventDefault();
@@ -573,29 +604,47 @@ export class RoomViewComponent implements OnInit, OnDestroy {
 
   onDrop(event: DragEvent) {
     event.preventDefault();
-    const currentHoverIndex = this.hoverIndex; 
-    this.hoverIndex = null; 
-    if (!event.dataTransfer) return;
+    const currentHoverIndex = this.hoverIndex; // Capture hover index before using it
+    
+    if (!event.dataTransfer) {
+        this.hoverIndex = null; // Reset if drop is invalid early
+        return;
+    }
     const text = event.dataTransfer.getData('text/plain');
-    if (!text) return;
+    if (!text) {
+        this.hoverIndex = null; // Reset if drop is invalid early
+        return;
+    }
 
+    const wordItem = this.availableWords.find(w => w.text === text && !w.used);
     // Use the captured hover index for insertion point calculation
     const insertIndex = currentHoverIndex !== null ? currentHoverIndex : this.sentenceWords.length;
 
-    // Regardless of origin, just insert the word text at the calculated index
-    // The 'used' status was handled in onDragStart / onSentenceWordDragStart
-    // If it was dragged from the sentence, it was already removed in onSentenceWordDragStart
-    this.sentenceWords.splice(insertIndex, 0, text);
-
-    // Ensure the corresponding item in availableWords is marked as used
-    const wordItem = this.availableWords.find(w => w.text === text);
-    if (wordItem) {
+    if (this.draggedSentenceWordIndex !== null) { // Word came from the sentence (reordering)
+         // Check if index is valid before accessing sentenceWords
+         if (this.draggedSentenceWordIndex >= 0 && this.draggedSentenceWordIndex < this.sentenceWords.length) {
+             const wordToMove = this.sentenceWords[this.draggedSentenceWordIndex];
+             if (wordToMove === text) { // Verify it's the correct word being dropped
+                 this.sentenceWords.splice(this.draggedSentenceWordIndex, 1);
+                 // Adjust insert index if the removal affected it
+                 const adjustedInsertIndex = (this.draggedSentenceWordIndex < insertIndex) ? insertIndex - 1 : insertIndex;
+                 this.sentenceWords.splice(adjustedInsertIndex, 0, text);
+             } else {
+                 console.error("Mismatched word during sentence reorder drop.");
+                 // If mismatch, maybe don't do anything or log error. The word wasn't removed yet.
+             }
+         } else {
+              console.error("Invalid draggedSentenceWordIndex during drop.");
+         }
+    } else if (wordItem) { // Word came from the bank
         wordItem.used = true;
+        this.sentenceWords.splice(insertIndex, 0, text);
     }
-
-    // Clear drag state AFTER processing drop
-    this.draggedWordText = null; 
-    this.isDraggingFromSentence = false;
+    
+    // Clear drag state and hover index AFTER processing drop
+    this.draggedWord = null; 
+    this.draggedSentenceWordIndex = null; 
+    this.hoverIndex = null; 
   }
 
   removeWord(index: number) {
@@ -638,11 +687,14 @@ export class RoomViewComponent implements OnInit, OnDestroy {
        }));
    }
 
+   // Method to call the service for readying up
    readyUp() {
        this.signalRService.readyUp()
            .catch(err => console.error("Error calling readyUp:", err));
+       // Optionally disable button immediately after click
    }
 
+   // Helper to check if a player is in the ready list
    isPlayerReady(playerName: string): boolean {
        return !!this.gameState?.readyPlayers?.includes(playerName);
    }
