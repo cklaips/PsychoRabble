@@ -1,4 +1,5 @@
 using PsychoRabble.API.Hubs;
+using PsychoRabble.API.Services; // Add this using statement
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +13,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
 
 // Add CORS
+builder.Services.AddSingleton<RoomManagerService>(); // Register RoomManagerService as Singleton
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAllOrigins",

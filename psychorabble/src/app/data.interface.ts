@@ -6,7 +6,8 @@ export interface RoomInfo {
 
 export interface GameState {
   availableWords: string[];
-  currentPhase: string; // e.g., SUBMITTING, VOTING, RESULTS
+  currentPhase: string; // e.g., PENDING, SUBMITTING, VOTING, RESULTS
+  roundStartTime: string | null; // ISO 8601 date string or null
   submittedPlayers: string[];
   submittedSentences: { [playerName: string]: string };
   votes: { [playerName: string]: number }; // Added votes dictionary
