@@ -1,11 +1,11 @@
-import { Component, OnInit, OnDestroy, Input, ChangeDetectorRef, NgZone, ViewChild, ElementRef, AfterViewChecked } from '@angular/core'; // Added ChangeDetectorRef, NgZone, ViewChild, ElementRef, AfterViewChecked
+import { Component, OnInit, OnDestroy, Input, ChangeDetectorRef, NgZone, ViewChild, ElementRef, AfterViewChecked } from '@angular/core'; 
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { GameState, RoomInfo } from '../data.interface'; 
 import { SignalRService } from '../services/signalr.service';
-import { Subscription, interval } from 'rxjs'; // Added interval
-import { takeWhile } from 'rxjs/operators'; // Added takeWhile
+import { Subscription, interval } from 'rxjs'; 
+import { takeWhile } from 'rxjs/operators'; 
 import { VotingComponent } from '../voting/voting.component'; 
 
 interface WordItem {
@@ -32,13 +32,16 @@ interface WordItem {
          <div *ngIf="gameState?.currentPhase === 'PENDING'" class="pending-area game-area">
              <h2>Waiting for Players...</h2>
              <p *ngIf="players.length < 2">Need at least 2 players to start the round.</p>
-             <p *ngIf="players.length >= 2 && countdown > 0">Round starting in {{ countdown }} seconds...</p>
-             <p *ngIf="players.length >= 2 && countdown === 0 && gameState?.roundStartTime">Starting round...</p> 
-             <!-- Add spinner or visual indicator? -->
+             <p *ngIf="players.length >= 2 && gameState?.roundStartTime && countdown > 0">Round starting in {{ countdown }} seconds...</p>
+             <p *ngIf="players.length >= 2 && gameState?.roundStartTime && countdown === 0">Starting round...</p> 
          </div>
 
         <!-- Submitting State -->
         <div *ngIf="gameState?.currentPhase === 'SUBMITTING'" class="game-area">
+           <div class="submission-timer" *ngIf="submissionCountdown > 0">
+               Time left to submit: {{ submissionCountdown }}s
+           </div>
+
           <div class="word-bank">
             <h2>Available Words:</h2>
             <div class="words-container">
@@ -173,8 +176,10 @@ interface WordItem {
     .header .leave-button { padding: 0.4rem 0.8rem; background-color: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.8rem; position: absolute; top: 5px; right: 5px; transition: background-color 0.3s ease; }
     .header .leave-button:hover { background-color: #c0392b; }
     .main-content-area { margin-bottom: 2rem; }
-    .game-area, .voting-area, .results-area, .pending-area { background-color: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); padding: 2rem; min-height: 300px; /* Ensure minimum height */ }
+    .game-area, .voting-area, .results-area, .pending-area { background-color: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); padding: 2rem; min-height: 300px; }
     .game-area h2, .voting-area h2, .results-area h2, .pending-area h2 { color: #2c3e50; margin-bottom: 1rem; }
+    .pending-area p { margin: 0.5rem 0; font-size: 1.1rem; text-align: center; }
+    .submission-timer { text-align: right; font-weight: bold; color: #e74c3c; margin-bottom: 1rem; }
     .word-bank { margin-bottom: 2rem; }
     .word-bank .words-container { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; background-color: #f8f9fa; border-radius: 8px; min-height: 60px; }
     .word-item { background-color: #3498db; color: white; padding: 0.5rem 1rem; border-radius: 20px; cursor: move; user-select: none; transition: all 0.3s ease; opacity: 1; visibility: visible; }
@@ -215,10 +220,13 @@ interface WordItem {
     .chat-input { display: flex; gap: 5px; }
     .chat-input input { flex-grow: 1; padding: 5px; border: 1px solid #ccc; border-radius: 3px;}
     .chat-input button { padding: 5px 10px; cursor: pointer; }
-    .pending-area p { margin: 0.5rem 0; font-size: 1.1rem; } 
   `]
 })
-export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { // Added AfterViewChecked
+export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
+  // Constants for timers
+  private readonly PENDING_TIMER_SECONDS = 30;
+  private readonly SUBMISSION_TIMER_SECONDS = 60;
+
   @Input() roomName: string = '';
   playerName: string = ''; 
   players: string[] = [];
@@ -232,15 +240,17 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
   chatMessages: { user: string, message: string }[] = [];
   newMessage: string = '';
   countdown: number = 0; 
-  private countdownSubscription?: Subscription; 
+  submissionCountdown: number = 0; 
+  private pendingCountdownSubscription?: Subscription; 
+  private submissionCountdownSubscription?: Subscription; 
   private playersSubscription?: Subscription;
   private routeSubscription?: Subscription; 
   private gameStateSubscription?: Subscription; 
   private playerNameSubscription?: Subscription; 
   private chatSubscription?: Subscription; 
-  private shouldScrollChat: boolean = false; // Flag for auto-scrolling chat
+  private shouldScrollChat: boolean = false; 
 
-  @ViewChild('chatMessagesContainer') private chatContainer?: ElementRef; // Reference to chat container
+  @ViewChild('chatMessagesContainer') private chatContainer?: ElementRef; 
 
   constructor(
     private route: ActivatedRoute, 
@@ -267,8 +277,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
 
     this.playersSubscription = this.signalRService.getPlayersObservable().subscribe(players => {
       this.players = players;
-      // Check if countdown needs to start/stop based on player count change
-      if(this.gameState) this.updateCountdownTimer(this.gameState); 
+      if(this.gameState) this.updatePendingCountdownTimer(this.gameState); 
     });
 
     this.gameStateSubscription = this.signalRService.getGameStateObservable().subscribe(state => {
@@ -278,20 +287,17 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
      this.chatSubscription = this.signalRService.getChatMessagesObservable().subscribe(messages => {
          const isAtBottom = this.isChatScrolledToBottom();
          this.chatMessages = messages;
-         if (isAtBottom) {
-             this.shouldScrollChat = true; // Mark that we need to scroll after view updates
-         }
+         if (isAtBottom) { this.shouldScrollChat = true; }
      });
   }
 
-  ngAfterViewChecked() { // Scroll chat after view updates if needed
+  ngAfterViewChecked() { 
       if (this.shouldScrollChat) {
           this.scrollToChatBottom();
           this.shouldScrollChat = false;
       }
   }
 
-  // Central handler for GameState updates
   handleGameStateUpdate(state: GameState | null) {
       console.log("GameState updated:", state); 
       const previousPhase = this.gameState?.currentPhase;
@@ -304,44 +310,82 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
               this.generatedSentence = '';
               this.updateAvailableWords(state.availableWords); 
           }
-          this.updateCountdownTimer(state);
+          if (state.currentPhase === 'PENDING') {
+              this.updatePendingCountdownTimer(state);
+              this.clearSubmissionCountdownTimer(); 
+          } else if (state.currentPhase === 'SUBMITTING') {
+               this.updateSubmissionCountdownTimer(state);
+               this.clearPendingCountdownTimer(); 
+          } else {
+              this.clearPendingCountdownTimer();
+              this.clearSubmissionCountdownTimer();
+          }
       } else {
            this.sentenceWords = []; 
            this.generatedSentence = '';
-           this.clearCountdownTimer();
+           this.clearPendingCountdownTimer();
+           this.clearSubmissionCountdownTimer();
       }
-      // No need for cdRef.detectChanges() here usually, NgZone handles interval updates
   }
 
-  updateCountdownTimer(state: GameState) {
-      this.clearCountdownTimer(); 
+  updatePendingCountdownTimer(state: GameState) {
+      this.clearPendingCountdownTimer(); 
       if (state.currentPhase === 'PENDING' && state.roundStartTime && this.players.length >= 2) {
           const startTime = new Date(state.roundStartTime).getTime();
-          const endTime = startTime + 30000; 
+          const endTime = startTime + this.PENDING_TIMER_SECONDS * 1000; // Use constant
 
           this.ngZone.runOutsideAngular(() => {
-              this.countdownSubscription = interval(1000)
+              this.pendingCountdownSubscription = interval(1000)
                   .pipe(takeWhile(() => Date.now() < endTime, true)) 
                   .subscribe(() => {
                       const now = Date.now();
                       const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
-                      this.ngZone.run(() => {
-                          this.countdown = remaining;
-                          // No need to trigger getGameState here, server broadcast handles phase change
+                      this.ngZone.run(() => { this.countdown = remaining; });
+                  });
+          });
+      } else {
+          this.ngZone.run(() => { this.countdown = 0; }); 
+      }
+  }
+
+  updateSubmissionCountdownTimer(state: GameState) {
+      this.clearSubmissionCountdownTimer(); 
+      if (state.currentPhase === 'SUBMITTING' && state.submissionEndTime) {
+          const endTime = new Date(state.submissionEndTime).getTime();
+
+          this.ngZone.runOutsideAngular(() => {
+              this.submissionCountdownSubscription = interval(1000)
+                  .pipe(takeWhile(() => Date.now() < endTime, true)) 
+                  .subscribe(() => {
+                      const now = Date.now();
+                      const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
+                      this.ngZone.run(() => { 
+                          this.submissionCountdown = remaining; 
+                          if (remaining === 0 && !this.hasPlayerSubmitted(this.playerName)) {
+                              console.log("Submission timer ended, auto-submitting client sentence.");
+                              this.onSubmit(); 
+                          }
                       });
                   });
           });
       } else {
-          this.ngZone.run(() => { this.countdown = 0; }); // Ensure reset happens in zone
+           this.ngZone.run(() => { this.submissionCountdown = 0; }); 
       }
   }
 
-  clearCountdownTimer() {
-      if (this.countdownSubscription) {
-          this.countdownSubscription.unsubscribe();
-          this.countdownSubscription = undefined;
-          // Run countdown reset inside zone to ensure view updates if needed
+  clearPendingCountdownTimer() {
+      if (this.pendingCountdownSubscription) {
+          this.pendingCountdownSubscription.unsubscribe();
+          this.pendingCountdownSubscription = undefined;
           this.ngZone.run(() => { this.countdown = 0; }); 
+      }
+  }
+
+  clearSubmissionCountdownTimer() {
+      if (this.submissionCountdownSubscription) {
+          this.submissionCountdownSubscription.unsubscribe();
+          this.submissionCountdownSubscription = undefined;
+          this.ngZone.run(() => { this.submissionCountdown = 0; }); 
       }
   }
 
@@ -352,7 +396,8 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
     this.gameStateSubscription?.unsubscribe(); 
     this.playerNameSubscription?.unsubscribe(); 
     this.chatSubscription?.unsubscribe(); 
-    this.clearCountdownTimer(); 
+    this.clearPendingCountdownTimer(); 
+    this.clearSubmissionCountdownTimer();
     this.signalRService.leaveRoom().catch(err => console.error("Error leaving room on destroy:", err));
   }
 
@@ -360,6 +405,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
     if (!word.used) {
       word.used = true;
       this.sentenceWords.push(word.text);
+      this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state
     }
   }
 
@@ -393,6 +439,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
                 const wordItem = this.availableWords.find(w => w.text === wordText);
                 if (wordItem) { wordItem.used = false; }
             }
+             this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state
         } else if (this.draggedSentenceWordIndex !== null) { 
              console.warn("draggedSentenceWordIndex was invalid or null in onDragEnd during sentence drag cleanup.");
         }
@@ -462,6 +509,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
     this.draggedWord = null; 
     this.draggedSentenceWordIndex = null; 
     this.hoverIndex = null; 
+    this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state after drop
   }
 
   removeWord(index: number) {
@@ -469,6 +517,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
     this.sentenceWords.splice(index, 1);
     const wordItem = this.availableWords.find(w => w.text === word);
     if (wordItem) { wordItem.used = false; }
+    this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state
   }
 
   onSubmit() {
@@ -537,11 +586,8 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
    private isChatScrolledToBottom(): boolean {
        try {
            const element = this.chatContainer?.nativeElement;
-           // Check if near bottom (within a tolerance, e.g., 10px)
            return element ? Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 10 : true;
-       } catch (err) {
-           return true; // Default to true if check fails
-       }
+       } catch (err) { return true; }
    }
 
    private scrollToChatBottom(): void {
@@ -549,8 +595,6 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked { 
            if (this.chatContainer?.nativeElement) {
                this.chatContainer.nativeElement.scrollTop = this.chatContainer.nativeElement.scrollHeight;
            }
-       } catch (err) { 
-           console.error("Error scrolling chat:", err);
-       }
+       } catch (err) { console.error("Error scrolling chat:", err); }
    }
 }

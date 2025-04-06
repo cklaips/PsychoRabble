@@ -145,5 +145,14 @@ namespace PsychoRabble.API.Hubs
             var playerInfo = GetCurrentPlayerInfo();
             await Clients.Group(playerInfo.RoomName).SendAsync("ReceiveMessage", playerInfo.PlayerName, message);
         }
+
+        // Method for client to update its current sentence state frequently
+        public Task UpdateCurrentSentence(List<string> currentWords) 
+        {
+            var playerInfo = GetCurrentPlayerInfo(); 
+            _roomManager.UpdatePlayerSentence(playerInfo.RoomName, playerInfo.PlayerName, currentWords);
+            // No broadcast needed here, just update server state
+            return Task.CompletedTask; 
+        }
     }
 }

@@ -12,8 +12,10 @@ builder.Services.AddSwaggerGen();
 // Add SignalR
 builder.Services.AddSignalR();
 
-// Add CORS
+// Add Custom Services
 builder.Services.AddSingleton<RoomManagerService>(); // Register RoomManagerService as Singleton
+
+// Add CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAllOrigins",

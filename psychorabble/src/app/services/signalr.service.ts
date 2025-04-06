@@ -120,6 +120,18 @@ export class SignalRService {
     }
   }
 
+  // Send frequent updates of the user's current sentence construction
+  async updateCurrentSentence(currentWords: string[]): Promise<void> {
+      if (!this.hubConnection || this.hubConnection.state !== 'Connected') return; // Guard clause
+      try {
+          // Use send instead of invoke if no return value is expected
+          await this.hubConnection.send('UpdateCurrentSentence', currentWords); 
+      } catch (error) {
+          console.error('Error updating current sentence:', error);
+          // Don't necessarily throw, as this is a frequent background update
+      }
+  }
+
    async sendMessage(message: string): Promise<void> {
     if (!message) return;
     try {
