@@ -9,6 +9,8 @@ export interface GameState {
   currentPhase: string; // e.g., PENDING, SUBMITTING, VOTING, RESULTS
   roundStartTime: string | null; // ISO 8601 date string or null
   submissionEndTime: string | null; // ISO 8601 date string or null
+  votingEndTime: string | null; // ISO 8601 date string or null
+  resultsEndTime: string | null; // ISO 8601 date string or null
   submittedPlayers: string[];
   submittedSentences: { [playerName: string]: string };
   votes: { [playerName: string]: number }; // Added votes dictionary

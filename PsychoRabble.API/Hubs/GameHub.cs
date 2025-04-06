@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using PsychoRabble.API.Models;
-using PsychoRabble.API.Services; // Added for RoomManagerService
+using PsychoRabble.API.Services; // Ensure this is present
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +10,6 @@ namespace PsychoRabble.API.Hubs
 {
     public class GameHub : Hub
     {
-        // Inject RoomManagerService instead of using static dictionaries directly
         private readonly RoomManagerService _roomManager;
 
         public GameHub(RoomManagerService roomManager)
@@ -18,14 +17,11 @@ namespace PsychoRabble.API.Hubs
             _roomManager = roomManager;
         }
 
-        // Helper to safely get player info (avoids repeated lookups in hub methods)
         private PlayerInfo GetCurrentPlayerInfo()
         {
             var playerInfo = _roomManager.GetPlayerInfo(Context.ConnectionId);
             if (playerInfo == null)
             {
-                // This should ideally not happen if the connection is active and joined
-                // Log error or handle appropriately
                 throw new HubException("Player information not found for this connection.");
             }
             return playerInfo;
@@ -33,12 +29,11 @@ namespace PsychoRabble.API.Hubs
 
         public async Task CreateRoom(string roomName)
         {
-            var (success, error, room, gameState) = _roomManager.CreateRoom(roomName);
+            var (success, error, _, _) = _roomManager.CreateRoom(roomName); // Discard room/gameState return if not needed here
             if (!success)
             {
                 throw new HubException(error ?? "Failed to create room.");
             }
-            // Notify all clients about the updated list of available rooms
             await Clients.All.SendAsync("AvailableRoomsUpdated", _roomManager.GetRoomInfoList());
         }
 
@@ -51,29 +46,28 @@ namespace PsychoRabble.API.Hubs
              }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
-            // Get updated player list from service
-            var room = _roomManager.GetRoomInfo(roomName); // Need a GetRoomInfo method in service
+            var room = _roomManager.GetRoomInfo(roomName); 
             if (room != null) {
                  await Clients.Group(roomName).SendAsync("PlayersUpdated", room.Players); 
             }
             await Clients.Caller.SendAsync("JoinedRoom", playerInfo, gameState); 
             await Clients.All.SendAsync("AvailableRoomsUpdated", _roomManager.GetRoomInfoList()); 
-
-            // Timer starting logic is now handled within RoomManagerService.AddPlayerToRoom
+            // Timer starting logic is handled by the service
         }
 
         public async Task LeaveRoom()
         {
-            var (playerInfo, room, gameState, remainingPlayers, roomRemoved) = _roomManager.RemovePlayer(Context.ConnectionId);
+            // RemovePlayer returns if state changed and the potentially updated state
+            var (playerInfo, stateChanged, gameState, remainingPlayers, roomRemoved) = _roomManager.RemovePlayer(Context.ConnectionId);
 
-            if (playerInfo != null) // Only proceed if the player was actually found and removed
+            if (playerInfo != null) 
             {
                  await Groups.RemoveFromGroupAsync(Context.ConnectionId, playerInfo.RoomName);
                  if (remainingPlayers != null) {
                      await Clients.Group(playerInfo.RoomName).SendAsync("PlayersUpdated", remainingPlayers);
                  }
-                 // If timer was cancelled or room removed, broadcast potentially updated state
-                 if (gameState != null && (roomRemoved || (gameState.CurrentPhase == "PENDING" && gameState.RoundStartTime == null))) {
+                 // Broadcast state *only if* it actually changed due to leave (e.g., timer cancelled, phase advanced)
+                 if (stateChanged && gameState != null) { 
                      await Clients.Group(playerInfo.RoomName).SendAsync("GameStateUpdated", gameState);
                  }
                  // Always update room list for everyone
@@ -89,12 +83,14 @@ namespace PsychoRabble.API.Hubs
         public async Task SubmitSentence(string sentence)
         {
             var playerInfo = GetCurrentPlayerInfo();
+            // Service method now returns the updated state which might have changed phase
             var (success, error, updatedGameState) = _roomManager.SubmitSentence(playerInfo.RoomName, playerInfo.PlayerName, sentence);
 
             if (!success) {
                  throw new HubException(error ?? "Failed to submit sentence.");
             }
-            if (updatedGameState != null) {
+            // Broadcast the result from the service call
+            if (updatedGameState != null) { 
                  await Clients.Group(playerInfo.RoomName).SendAsync("GameStateUpdated", updatedGameState);
             }
         }
@@ -107,21 +103,20 @@ namespace PsychoRabble.API.Hubs
              if (!success) {
                  throw new HubException(error ?? "Failed to cast vote.");
              }
-              if (updatedGameState != null) {
+             if (updatedGameState != null) {
                  await Clients.Group(playerInfo.RoomName).SendAsync("GameStateUpdated", updatedGameState);
              }
         }
 
         public async Task<GameState?> GetGameState()
         {
-            // No need to check round start here anymore, service handles it
+            // Service method GetGameState doesn't modify state, just retrieves
             var playerInfo = _roomManager.GetPlayerInfo(Context.ConnectionId);
             return playerInfo != null ? _roomManager.GetGameState(playerInfo.RoomName) : null;
         }
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            // Call LeaveRoom which now uses the service
             await LeaveRoom(); 
             await base.OnDisconnectedAsync(exception);
         }
@@ -134,6 +129,7 @@ namespace PsychoRabble.API.Hubs
              if (!success) {
                  throw new HubException(error ?? "Failed to ready up.");
              }
+             // Broadcast the result from the service call
              if (updatedGameState != null) {
                  await Clients.Group(playerInfo.RoomName).SendAsync("GameStateUpdated", updatedGameState);
              }
@@ -143,15 +139,15 @@ namespace PsychoRabble.API.Hubs
         {
             if (string.IsNullOrWhiteSpace(message)) return; 
             var playerInfo = GetCurrentPlayerInfo();
+            // Send directly, no state change expected
             await Clients.Group(playerInfo.RoomName).SendAsync("ReceiveMessage", playerInfo.PlayerName, message);
         }
 
-        // Method for client to update its current sentence state frequently
+        // Client frequently updates its current sentence state
         public Task UpdateCurrentSentence(List<string> currentWords) 
         {
             var playerInfo = GetCurrentPlayerInfo(); 
             _roomManager.UpdatePlayerSentence(playerInfo.RoomName, playerInfo.PlayerName, currentWords);
-            // No broadcast needed here, just update server state
             return Task.CompletedTask; 
         }
     }

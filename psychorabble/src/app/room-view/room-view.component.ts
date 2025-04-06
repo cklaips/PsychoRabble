@@ -99,6 +99,9 @@ interface WordItem {
 
          <!-- Voting Area -->
          <div *ngIf="gameState?.currentPhase === 'VOTING' && gameState" class="voting-area">
+           <div class="submission-timer" *ngIf="votingCountdown > 0"> <!-- Use submission-timer style -->
+               Time left to vote: {{ votingCountdown }}s
+           </div>
            <h2>Vote for the best sentence!</h2>
            <app-voting 
              [submittedSentences]="gameState.submittedSentences" 
@@ -111,6 +114,9 @@ interface WordItem {
 
          <!-- Results Area -->
           <div *ngIf="gameState?.currentPhase === 'RESULTS' && gameState" class="results-area voting-area"> 
+            <div class="submission-timer" *ngIf="resultsCountdown > 0"> <!-- Use submission-timer style -->
+               Next round in: {{ resultsCountdown }}s
+           </div>
             <h2>Results:</h2>
              <app-voting 
                [submittedSentences]="gameState.submittedSentences" 
@@ -179,7 +185,7 @@ interface WordItem {
     .game-area, .voting-area, .results-area, .pending-area { background-color: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); padding: 2rem; min-height: 300px; }
     .game-area h2, .voting-area h2, .results-area h2, .pending-area h2 { color: #2c3e50; margin-bottom: 1rem; }
     .pending-area p { margin: 0.5rem 0; font-size: 1.1rem; text-align: center; }
-    .submission-timer { text-align: right; font-weight: bold; color: #e74c3c; margin-bottom: 1rem; }
+    .submission-timer { text-align: right; font-weight: bold; color: #e74c3c; margin-bottom: 1rem; } /* Used for all timers */
     .word-bank { margin-bottom: 2rem; }
     .word-bank .words-container { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; background-color: #f8f9fa; border-radius: 8px; min-height: 60px; }
     .word-item { background-color: #3498db; color: white; padding: 0.5rem 1rem; border-radius: 20px; cursor: move; user-select: none; transition: all 0.3s ease; opacity: 1; visibility: visible; }
@@ -226,6 +232,8 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
   // Constants for timers
   private readonly PENDING_TIMER_SECONDS = 30;
   private readonly SUBMISSION_TIMER_SECONDS = 60;
+  private readonly VOTING_TIMER_SECONDS = 20; 
+  private readonly RESULTS_TIMER_SECONDS = 30; // Added results timer constant
 
   @Input() roomName: string = '';
   playerName: string = ''; 
@@ -241,8 +249,12 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
   newMessage: string = '';
   countdown: number = 0; 
   submissionCountdown: number = 0; 
+  votingCountdown: number = 0; 
+  resultsCountdown: number = 0; // Added for results timer display
   private pendingCountdownSubscription?: Subscription; 
   private submissionCountdownSubscription?: Subscription; 
+  private votingCountdownSubscription?: Subscription; 
+  private resultsCountdownSubscription?: Subscription; // Added for results timer
   private playersSubscription?: Subscription;
   private routeSubscription?: Subscription; 
   private gameStateSubscription?: Subscription; 
@@ -310,21 +322,40 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
               this.generatedSentence = '';
               this.updateAvailableWords(state.availableWords); 
           }
+          // Update relevant countdown timer based on phase
           if (state.currentPhase === 'PENDING') {
               this.updatePendingCountdownTimer(state);
               this.clearSubmissionCountdownTimer(); 
+              this.clearVotingCountdownTimer();
+              this.clearResultsCountdownTimer(); // Clear results timer
           } else if (state.currentPhase === 'SUBMITTING') {
                this.updateSubmissionCountdownTimer(state);
                this.clearPendingCountdownTimer(); 
-          } else {
+               this.clearVotingCountdownTimer();
+               this.clearResultsCountdownTimer(); 
+          } else if (state.currentPhase === 'VOTING') {
+               this.updateVotingCountdownTimer(state);
+               this.clearPendingCountdownTimer(); 
+               this.clearSubmissionCountdownTimer();
+               this.clearResultsCountdownTimer(); 
+          } else if (state.currentPhase === 'RESULTS') {
+               this.updateResultsCountdownTimer(state); // Update results timer
+               this.clearPendingCountdownTimer(); 
+               this.clearSubmissionCountdownTimer();
+               this.clearVotingCountdownTimer(); 
+          } else { 
               this.clearPendingCountdownTimer();
               this.clearSubmissionCountdownTimer();
+              this.clearVotingCountdownTimer();
+              this.clearResultsCountdownTimer(); 
           }
       } else {
            this.sentenceWords = []; 
            this.generatedSentence = '';
            this.clearPendingCountdownTimer();
            this.clearSubmissionCountdownTimer();
+           this.clearVotingCountdownTimer();
+           this.clearResultsCountdownTimer(); 
       }
   }
 
@@ -332,7 +363,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.clearPendingCountdownTimer(); 
       if (state.currentPhase === 'PENDING' && state.roundStartTime && this.players.length >= 2) {
           const startTime = new Date(state.roundStartTime).getTime();
-          const endTime = startTime + this.PENDING_TIMER_SECONDS * 1000; // Use constant
+          const endTime = startTime + this.PENDING_TIMER_SECONDS * 1000; 
 
           this.ngZone.runOutsideAngular(() => {
               this.pendingCountdownSubscription = interval(1000)
@@ -373,6 +404,44 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
   }
 
+   updateVotingCountdownTimer(state: GameState) {
+      this.clearVotingCountdownTimer(); 
+      if (state.currentPhase === 'VOTING' && state.votingEndTime) {
+          const endTime = new Date(state.votingEndTime).getTime();
+
+          this.ngZone.runOutsideAngular(() => {
+              this.votingCountdownSubscription = interval(1000)
+                  .pipe(takeWhile(() => Date.now() < endTime, true)) 
+                  .subscribe(() => {
+                      const now = Date.now();
+                      const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
+                      this.ngZone.run(() => { this.votingCountdown = remaining; });
+                  });
+          });
+      } else {
+           this.ngZone.run(() => { this.votingCountdown = 0; }); 
+      }
+  }
+
+   updateResultsCountdownTimer(state: GameState) { // Added method
+      this.clearResultsCountdownTimer(); 
+      if (state.currentPhase === 'RESULTS' && state.resultsEndTime) {
+          const endTime = new Date(state.resultsEndTime).getTime();
+
+          this.ngZone.runOutsideAngular(() => {
+              this.resultsCountdownSubscription = interval(1000)
+                  .pipe(takeWhile(() => Date.now() < endTime, true)) 
+                  .subscribe(() => {
+                      const now = Date.now();
+                      const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
+                      this.ngZone.run(() => { this.resultsCountdown = remaining; });
+                  });
+          });
+      } else {
+           this.ngZone.run(() => { this.resultsCountdown = 0; }); 
+      }
+  }
+
   clearPendingCountdownTimer() {
       if (this.pendingCountdownSubscription) {
           this.pendingCountdownSubscription.unsubscribe();
@@ -389,6 +458,22 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
   }
 
+  clearVotingCountdownTimer() {
+      if (this.votingCountdownSubscription) {
+          this.votingCountdownSubscription.unsubscribe();
+          this.votingCountdownSubscription = undefined;
+          this.ngZone.run(() => { this.votingCountdown = 0; }); 
+      }
+  }
+
+  clearResultsCountdownTimer() { // Added method
+      if (this.resultsCountdownSubscription) {
+          this.resultsCountdownSubscription.unsubscribe();
+          this.resultsCountdownSubscription = undefined;
+          this.ngZone.run(() => { this.resultsCountdown = 0; }); 
+      }
+  }
+
 
   ngOnDestroy() {
     this.playersSubscription?.unsubscribe();
@@ -398,6 +483,8 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.chatSubscription?.unsubscribe(); 
     this.clearPendingCountdownTimer(); 
     this.clearSubmissionCountdownTimer();
+    this.clearVotingCountdownTimer(); 
+    this.clearResultsCountdownTimer(); // Clear results timer
     this.signalRService.leaveRoom().catch(err => console.error("Error leaving room on destroy:", err));
   }
 
@@ -405,7 +492,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (!word.used) {
       word.used = true;
       this.sentenceWords.push(word.text);
-      this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state
+      this.signalRService.updateCurrentSentence(this.sentenceWords); 
     }
   }
 
@@ -439,7 +526,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
                 const wordItem = this.availableWords.find(w => w.text === wordText);
                 if (wordItem) { wordItem.used = false; }
             }
-             this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state
+             this.signalRService.updateCurrentSentence(this.sentenceWords); 
         } else if (this.draggedSentenceWordIndex !== null) { 
              console.warn("draggedSentenceWordIndex was invalid or null in onDragEnd during sentence drag cleanup.");
         }
@@ -509,7 +596,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.draggedWord = null; 
     this.draggedSentenceWordIndex = null; 
     this.hoverIndex = null; 
-    this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state after drop
+    this.signalRService.updateCurrentSentence(this.sentenceWords); 
   }
 
   removeWord(index: number) {
@@ -517,7 +604,7 @@ export class RoomViewComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.sentenceWords.splice(index, 1);
     const wordItem = this.availableWords.find(w => w.text === word);
     if (wordItem) { wordItem.used = false; }
-    this.signalRService.updateCurrentSentence(this.sentenceWords); // Update server state
+    this.signalRService.updateCurrentSentence(this.sentenceWords); 
   }
 
   onSubmit() {

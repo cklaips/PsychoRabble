@@ -2,7 +2,7 @@ using System;
 using System.Collections.Concurrent; 
 using System.Collections.Generic;
 using System.Linq;
-using System.Text; // For processing sentence
+using System.Text; 
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.SignalR;
@@ -21,6 +21,8 @@ namespace PsychoRabble.API.Services
 
         private const int PENDING_TIMER_SECONDS = 30;
         private const int SUBMISSION_TIMER_SECONDS = 60; 
+        private const int VOTING_TIMER_SECONDS = 20; 
+        private const int RESULTS_TIMER_SECONDS = 30; 
 
         public RoomManagerService(IHubContext<GameHub> hubContext)
         {
@@ -86,6 +88,7 @@ namespace PsychoRabble.API.Services
             if (_playerInfoByConnectionId.TryAdd(connectionId, playerInfo))
             {
                  bool timerNeedsStarting = false;
+                 bool stateChanged = false; 
                  lock(gameState) lock(room) 
                  {
                      if (gameState.CurrentPhase == "PENDING" && room.Players.Count >= 2 && gameState.RoundStartTime == null)
@@ -93,6 +96,7 @@ namespace PsychoRabble.API.Services
                          Console.WriteLine($"Room '{roomName}' reached {room.Players.Count} players. Setting PENDING timer.");
                          gameState.RoundStartTime = DateTimeOffset.UtcNow;
                          timerNeedsStarting = true; 
+                         stateChanged = true;
                      }
                  }
                  if(timerNeedsStarting) {
@@ -126,7 +130,8 @@ namespace PsychoRabble.API.Services
                          if(room.Players.Remove(playerInfo.PlayerName))
                          {
                              remainingPlayers = room.Players.ToList(); 
-                             gameState.CurrentSentenceWords.Remove(playerInfo.PlayerName); // Remove current sentence too
+                             gameState.CurrentSentenceWords.Remove(playerInfo.PlayerName); 
+                             gameState.ReadyPlayers.Remove(playerInfo.PlayerName); 
 
                              if (gameState.CurrentPhase == "PENDING" && room.Players.Count < 2 && gameState.RoundStartTime != null)
                              {
@@ -144,6 +149,23 @@ namespace PsychoRabble.API.Services
                                      CancelTimer(playerInfo.RoomName); 
                                      gameState.CurrentPhase = "VOTING";
                                      gameState.SubmissionEndTime = null;
+                                     gameState.VotingEndTime = DateTimeOffset.UtcNow.AddSeconds(VOTING_TIMER_SECONDS); 
+                                     ScheduleStateCheck(playerInfo.RoomName, TimeSpan.FromSeconds(VOTING_TIMER_SECONDS));
+                                     stateChanged = true;
+                                 }
+                             }
+
+                             if (gameState.CurrentPhase == "VOTING") {
+                                 gameState.VotedPlayers.Remove(playerInfo.PlayerName); 
+                                 bool allRemainingVoted = room.Players.Count > 0 && room.Players.All(p => gameState.VotedPlayers.Contains(p));
+                                 if (allRemainingVoted) {
+                                     Console.WriteLine($"Leaver '{playerInfo.PlayerName}' was last needed for voting in '{playerInfo.RoomName}'. Moving to RESULTS.");
+                                     CancelTimer(playerInfo.RoomName); 
+                                     gameState.CurrentPhase = "RESULTS";
+                                     gameState.VotingEndTime = null;
+                                     CalculateWinners(gameState); 
+                                     gameState.ResultsEndTime = DateTimeOffset.UtcNow.AddSeconds(RESULTS_TIMER_SECONDS); 
+                                     ScheduleStateCheck(playerInfo.RoomName, TimeSpan.FromSeconds(RESULTS_TIMER_SECONDS));
                                      stateChanged = true;
                                  }
                              }
@@ -198,15 +220,12 @@ namespace PsychoRabble.API.Services
             {
                 if (gameState.CurrentPhase != "SUBMITTING") return (false, "Not in the submitting phase.", null);
                 
-                // Process the final sentence (could also be done when reading SubmittedSentences)
-                // For now, assume 'sentence' is already processed by client onSubmit
-                
                 if (!gameState.SubmittedPlayers.Contains(playerName))
                 {
                      gameState.SubmittedPlayers.Add(playerName);
                 }
                 gameState.SubmittedSentences[playerName] = sentence; 
-                gameState.CurrentSentenceWords.Remove(playerName); // Clear temporary sentence on submit
+                gameState.CurrentSentenceWords.Remove(playerName); 
 
                 bool allSubmitted = room.Players.All(p => gameState.SubmittedPlayers.Contains(p));
                 if (allSubmitted && room.Players.Count > 0) 
@@ -215,6 +234,8 @@ namespace PsychoRabble.API.Services
                     CancelTimer(roomName); 
                     gameState.CurrentPhase = "VOTING";
                     gameState.SubmissionEndTime = null;
+                    gameState.VotingEndTime = DateTimeOffset.UtcNow.AddSeconds(VOTING_TIMER_SECONDS); 
+                    ScheduleStateCheck(roomName, TimeSpan.FromSeconds(VOTING_TIMER_SECONDS));
                     stateChanged = true;
                 }
             }
@@ -228,12 +249,12 @@ namespace PsychoRabble.API.Services
                  return (false, "Game or room state not found.", null);
              }
 
+             bool stateChanged = false;
              lock(gameState) lock(room) 
              {
                 if (gameState.CurrentPhase != "VOTING") return (false, "Not in the voting phase.", null);
                 if (voterPlayerName == votedPlayerName) return (false, "You cannot vote for yourself.", null);
                 if (gameState.VotedPlayers.Contains(voterPlayerName)) return (false, "You have already voted.", null);
-                // Ensure the voted player actually submitted something
                 if (!gameState.SubmittedSentences.ContainsKey(votedPlayerName)) return (false, "Cannot vote for a player who did not submit a sentence.", null);
 
                 gameState.VotedPlayers.Add(voterPlayerName);
@@ -242,14 +263,14 @@ namespace PsychoRabble.API.Services
                 bool allVoted = room.Players.All(p => gameState.VotedPlayers.Contains(p));
                 if (allVoted && room.Players.Count > 0)
                 {
-                    gameState.CurrentPhase = "RESULTS"; 
-                    if (gameState.Votes.Any())
-                    {
-                        int maxVotes = gameState.Votes.Values.Max();
-                        gameState.Winners = gameState.Votes.Where(pair => pair.Value == maxVotes).Select(pair => pair.Key).ToList();
-                    }
-                    else { gameState.Winners = new List<string>(); }
-                     Console.WriteLine($"All players voted in '{roomName}'. Phase changed to RESULTS. Winners: {string.Join(", ", gameState.Winners)}");
+                    Console.WriteLine($"All players voted in '{roomName}'. Phase changed to RESULTS.");
+                    CancelTimer(roomName); 
+                    gameState.CurrentPhase = "RESULTS";
+                    gameState.VotingEndTime = null;
+                    CalculateWinners(gameState); 
+                    gameState.ResultsEndTime = DateTimeOffset.UtcNow.AddSeconds(RESULTS_TIMER_SECONDS); 
+                    ScheduleStateCheck(roomName, TimeSpan.FromSeconds(RESULTS_TIMER_SECONDS));
+                    stateChanged = true;
                 }
              } 
              return (true, null, gameState);
@@ -263,6 +284,7 @@ namespace PsychoRabble.API.Services
              }
 
              bool stateChanged = false; 
+             bool startNewRound = false; 
              lock(gameState) lock(room) 
              {
                 if (gameState.CurrentPhase != "RESULTS") return (false, "Cannot ready up until results are shown.", null);
@@ -276,21 +298,23 @@ namespace PsychoRabble.API.Services
                 bool allReady = room.Players.All(p => gameState.ReadyPlayers.Contains(p));
                 if (allReady && room.Players.Count > 0)
                 {
-                    Console.WriteLine($"All players in room '{roomName}' are ready. Starting new round.");
+                    Console.WriteLine($"All players in room '{roomName}' are ready. Starting new round immediately.");
+                    CancelTimer(roomName); 
                     gameState.CurrentPhase = "SUBMITTING";
-                    gameState.SubmittedPlayers.Clear();
-                    gameState.SubmittedSentences.Clear();
-                    gameState.CurrentSentenceWords.Clear(); // Clear temp sentences
-                    gameState.Votes.Clear();
-                    gameState.VotedPlayers.Clear();
-                    gameState.Winners.Clear();
-                    gameState.ReadyPlayers.Clear();
+                    gameState.ResultsEndTime = null; 
+                    // Reset state...
+                    gameState.SubmittedPlayers.Clear(); gameState.SubmittedSentences.Clear(); gameState.CurrentSentenceWords.Clear(); gameState.Votes.Clear(); gameState.VotedPlayers.Clear(); gameState.Winners.Clear(); gameState.ReadyPlayers.Clear();
                     gameState.AvailableWords = GetNewWordList(); 
                     gameState.SubmissionEndTime = DateTimeOffset.UtcNow.AddSeconds(SUBMISSION_TIMER_SECONDS);
-                    ScheduleStateCheck(roomName, TimeSpan.FromSeconds(SUBMISSION_TIMER_SECONDS));
+                    startNewRound = true; 
                     stateChanged = true; 
                 }
              } 
+             
+             if(startNewRound) {
+                 ScheduleStateCheck(roomName, TimeSpan.FromSeconds(SUBMISSION_TIMER_SECONDS));
+             }
+             
              return (true, null, gameState); 
          }
 
@@ -334,8 +358,7 @@ namespace PsychoRabble.API.Services
             GameState? gameState = null;
             RoomInfo? room = null;
             bool stateChanged = false;
-            string? nextPhase = null;
-            Dictionary<string, string> sentencesToSubmit = new Dictionary<string, string>(); // Collect sentences to submit outside lock
+            string? nextPhase = null; 
 
             lock(_rooms) lock(_gameStates) 
             {
@@ -356,13 +379,7 @@ namespace PsychoRabble.API.Services
                              gameState.CurrentPhase = "SUBMITTING";
                              gameState.RoundStartTime = null; 
                              gameState.SubmissionEndTime = DateTimeOffset.UtcNow.AddSeconds(SUBMISSION_TIMER_SECONDS); 
-                             gameState.SubmittedPlayers.Clear();
-                             gameState.SubmittedSentences.Clear();
-                             gameState.CurrentSentenceWords.Clear(); // Clear temp sentences
-                             gameState.Votes.Clear();
-                             gameState.VotedPlayers.Clear();
-                             gameState.Winners.Clear();
-                             gameState.ReadyPlayers.Clear(); 
+                             gameState.SubmittedPlayers.Clear(); gameState.SubmittedSentences.Clear(); gameState.CurrentSentenceWords.Clear(); gameState.Votes.Clear(); gameState.VotedPlayers.Clear(); gameState.Winners.Clear(); gameState.ReadyPlayers.Clear(); 
                              gameState.AvailableWords = GetNewWordList(); 
                              stateChanged = true;
                              nextPhase = "SUBMITTING"; 
@@ -373,9 +390,7 @@ namespace PsychoRabble.API.Services
                              gameState.RoundStartTime = null; 
                              stateChanged = true; 
                          }
-                     } else {
-                          Console.WriteLine($"Timer fired for '{roomName}' (PENDING) but {PENDING_TIMER_SECONDS}s not yet elapsed.");
-                     }
+                     } else { Console.WriteLine($"Timer fired for '{roomName}' (PENDING) but {PENDING_TIMER_SECONDS}s not yet elapsed."); }
                 }
                 // Check for SUBMITTING -> VOTING transition
                 else if (gameState.CurrentPhase == "SUBMITTING" && gameState.SubmissionEndTime != null) 
@@ -383,39 +398,69 @@ namespace PsychoRabble.API.Services
                      if (DateTimeOffset.UtcNow >= gameState.SubmissionEndTime.Value)
                      {
                          Console.WriteLine($"Room '{roomName}' SUBMISSION timer expired. Forcing VOTING phase.");
-                         // Process and store sentences for players who haven't submitted
                          foreach(var player in room.Players.ToList()) 
                          {
                              if (!gameState.SubmittedPlayers.Contains(player))
                              {
                                  List<string> currentWords = gameState.CurrentSentenceWords.GetValueOrDefault(player, new List<string>());
-                                 string finalSentence = ProcessSentence(currentWords); // Use helper to process
-                                 
+                                 string finalSentence = ProcessSentence(currentWords); 
                                  gameState.SubmittedPlayers.Add(player);
                                  gameState.SubmittedSentences[player] = finalSentence; 
-                                 gameState.CurrentSentenceWords.Remove(player); // Clean up temp state
                                  Console.WriteLine($"Auto-submitting for {player}: '{finalSentence}'");
-                             } else {
-                                 // Also clean up temp state for players who did submit
-                                 gameState.CurrentSentenceWords.Remove(player);
                              }
+                             gameState.CurrentSentenceWords.Remove(player); 
                          }
                          gameState.CurrentPhase = "VOTING";
                          gameState.SubmissionEndTime = null;
+                         gameState.VotingEndTime = DateTimeOffset.UtcNow.AddSeconds(VOTING_TIMER_SECONDS); 
                          stateChanged = true;
                          nextPhase = "VOTING"; 
-                     } else {
-                          Console.WriteLine($"Timer fired for '{roomName}' (SUBMITTING) but {SUBMISSION_TIMER_SECONDS}s not yet elapsed.");
-                     }
+                     } else { Console.WriteLine($"Timer fired for '{roomName}' (SUBMITTING) but {SUBMISSION_TIMER_SECONDS}s not yet elapsed."); }
                 }
+                 // Check for VOTING -> RESULTS transition
+                 else if (gameState.CurrentPhase == "VOTING" && gameState.VotingEndTime != null) 
+                 {
+                      if (DateTimeOffset.UtcNow >= gameState.VotingEndTime.Value)
+                      {
+                          Console.WriteLine($"Room '{roomName}' VOTING timer expired. Forcing RESULTS phase.");
+                          gameState.CurrentPhase = "RESULTS";
+                          gameState.VotingEndTime = null;
+                          CalculateWinners(gameState); 
+                          gameState.ResultsEndTime = DateTimeOffset.UtcNow.AddSeconds(RESULTS_TIMER_SECONDS); 
+                          stateChanged = true;
+                          nextPhase = "RESULTS"; 
+                      } else { Console.WriteLine($"Timer fired for '{roomName}' (VOTING) but {VOTING_TIMER_SECONDS}s not yet elapsed."); }
+                 }
+                 // Check for RESULTS -> SUBMITTING transition (after results timer)
+                 else if (gameState.CurrentPhase == "RESULTS" && gameState.ResultsEndTime != null)
+                 {
+                      if (DateTimeOffset.UtcNow >= gameState.ResultsEndTime.Value)
+                      {
+                           Console.WriteLine($"Room '{roomName}' RESULTS timer expired. Starting new round (SUBMITTING).");
+                           gameState.CurrentPhase = "SUBMITTING";
+                           gameState.ResultsEndTime = null;
+                           // Reset state...
+                           gameState.SubmittedPlayers.Clear(); gameState.SubmittedSentences.Clear(); gameState.CurrentSentenceWords.Clear(); gameState.Votes.Clear(); gameState.VotedPlayers.Clear(); gameState.Winners.Clear(); gameState.ReadyPlayers.Clear();
+                           gameState.AvailableWords = GetNewWordList();
+                           gameState.SubmissionEndTime = DateTimeOffset.UtcNow.AddSeconds(SUBMISSION_TIMER_SECONDS);
+                           stateChanged = true;
+                           nextPhase = "SUBMITTING";
+                      } else { Console.WriteLine($"Timer fired for '{roomName}' (RESULTS) but {RESULTS_TIMER_SECONDS}s not yet elapsed."); }
+                 }
             } // End locks
 
             if (stateChanged) {
                  CancelTimer(roomName); 
             }
+            // Schedule next timer if needed
             if (nextPhase == "SUBMITTING") {
                  ScheduleStateCheck(roomName, TimeSpan.FromSeconds(SUBMISSION_TIMER_SECONDS));
+            } else if (nextPhase == "VOTING") {
+                 ScheduleStateCheck(roomName, TimeSpan.FromSeconds(VOTING_TIMER_SECONDS));
+            } else if (nextPhase == "RESULTS") {
+                 ScheduleStateCheck(roomName, TimeSpan.FromSeconds(RESULTS_TIMER_SECONDS));
             }
+
             if (stateChanged && gameState != null) {
                  Console.WriteLine($"Broadcasting GameStateUpdated for room '{roomName}' from timer callback. Phase: {gameState.CurrentPhase}");
                  await _hubContext.Clients.Group(roomName).SendAsync("GameStateUpdated", gameState); 
@@ -447,6 +492,16 @@ namespace PsychoRabble.API.Services
                 }
             }
             return string.Join(' ', finalSentenceParts);
+        }
+
+        // Helper to calculate winners
+        private void CalculateWinners(GameState gameState) {
+             if (gameState.Votes.Any())
+             {
+                 int maxVotes = gameState.Votes.Values.Max();
+                 gameState.Winners = gameState.Votes.Where(pair => pair.Value == maxVotes).Select(pair => pair.Key).ToList();
+             }
+             else { gameState.Winners = new List<string>(); }
         }
 
 

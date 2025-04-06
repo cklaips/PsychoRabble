@@ -10,9 +10,10 @@ namespace PsychoRabble.API.Models
     {
         public List<string> AvailableWords { get; set; } = new List<string>();
         public string CurrentPhase { get; set; } = "PENDING"; // PENDING, SUBMITTING, VOTING, RESULTS
-        // Removed duplicate CurrentPhase
         public DateTimeOffset? RoundStartTime { get; set; } = null; // When PENDING timer started
         public DateTimeOffset? SubmissionEndTime { get; set; } = null; // When SUBMITTING phase ends
+        public DateTimeOffset? VotingEndTime { get; set; } = null; // When VOTING phase ends
+        public DateTimeOffset? ResultsEndTime { get; set; } = null; // When RESULTS phase ends automatically
         // Stores the list of words currently placed in the sentence area by each player
         public Dictionary<string, List<string>> CurrentSentenceWords { get; set; } = new Dictionary<string, List<string>>(); 
         public List<string> SubmittedPlayers { get; set; } = new List<string>();
