@@ -12,7 +12,8 @@ export class SignalRService {
   private gameState = new BehaviorSubject<GameState | null>(null);
   private availableRooms = new BehaviorSubject<RoomInfo[]>([]);
   private players = new BehaviorSubject<string[]>([]);
-  private currentPlayerName = new BehaviorSubject<string | null>(null); // Added for current player's name
+  private currentPlayerName = new BehaviorSubject<string | null>(null); 
+  private chatMessages = new BehaviorSubject<{ user: string, message: string }[]>([]); // Added for chat
 
   constructor() {
     this.hubConnection = new HubConnectionBuilder()
@@ -48,6 +49,14 @@ export class SignalRService {
 
     this.hubConnection.on('PlayersUpdated', (players: string[]) => {
       this.players.next(players);
+    });
+
+    // Handle chat messages
+    this.hubConnection.on('ReceiveMessage', (user: string, message: string) => {
+        const currentMessages = this.chatMessages.value;
+        // Keep only the last N messages if desired, e.g., 50
+        const updatedMessages = [...currentMessages, { user, message }].slice(-50); 
+        this.chatMessages.next(updatedMessages);
     });
 
     // Handle the new event sent from the hub after joining
@@ -111,6 +120,16 @@ export class SignalRService {
     }
   }
 
+   async sendMessage(message: string): Promise<void> {
+    if (!message) return;
+    try {
+      await this.hubConnection.invoke('SendMessage', message);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
+    }
+  }
+
   async castVote(votedPlayerName: string): Promise<void> {
     try {
       await this.hubConnection.invoke('CastVote', votedPlayerName);
@@ -159,5 +178,10 @@ export class SignalRService {
   // Observable for the current player's confirmed name
   getCurrentPlayerNameObservable(): Observable<string | null> {
       return this.currentPlayerName.asObservable();
+  }
+
+  // Observable for chat messages
+  getChatMessagesObservable(): Observable<{ user: string, message: string }[]> {
+      return this.chatMessages.asObservable();
   }
 }

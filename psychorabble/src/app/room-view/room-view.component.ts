@@ -119,17 +119,41 @@ interface WordItem {
              </button>
           </div>
 
-        <div class="player-list">
-          <h2>Players in this room:</h2>
-          <ul>
-             <li *ngFor="let player of players">
+        <!-- Sidebar Column -->
+        <div class="sidebar">
+            <div class="player-list">
+              <h2>Players in this room:</h2>
+              <ul>
+                 <li *ngFor="let player of players">
                {{ player }} 
                <span *ngIf="hasPlayerSubmitted(player)" class="submitted-check" title="Submitted">✓</span>
                <span *ngIf="isPlayerReady(player)" class="ready-check" title="Ready">👍</span>
-             </li>
-          </ul>
-        </div>
-      </div>
+                 </li>
+              </ul>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <h2>Chat</h2>
+                <div class="chat-messages">
+                <div *ngFor="let msg of chatMessages" class="chat-message">
+                    <span class="chat-user">{{ msg.user }}:</span>
+                    <span class="chat-text">{{ msg.message }}</span>
+                </div>
+            </div>
+            <div class="chat-input">
+                <input 
+                    type="text" 
+                    placeholder="Type message..." 
+                    [(ngModel)]="newMessage" 
+                    (keydown.enter)="sendMessage()" />
+                <button (click)="sendMessage()" [disabled]="!newMessage.trim()">Send</button>
+            </div>
+            <!-- Removed duplicate chat-input div -->
+        </div> <!-- End Chat Area -->
+    </div> <!-- End Sidebar -->
+
+      </div> <!-- End Main Content -->
     </div>
   `,
   styles: [
@@ -202,12 +226,12 @@ interface WordItem {
     }
 
     .main-content {
-      display: flex;
+      display: flex; /* Use flexbox for column layout */
       gap: 2rem;
-      align-items: flex-start;
+      align-items: flex-start; /* Align items at the top */
     }
 
-    .game-area {
+    .game-area, .voting-area, .results-area { /* Game/Voting/Results take up flexible space */
       flex: 1;
       background-color: white;
       border-radius: 12px;
@@ -405,7 +429,78 @@ interface WordItem {
        ul { list-style: none; padding: 0; }
        li { margin-bottom: 10px; }
        .winner-message { margin-top: 20px; text-align: center; }
+       .ready-button { margin-top: 15px; } /* Add margin to ready button */
     }
+     .sidebar { /* Container for player list and chat */
+        display: flex;
+        flex-direction: column; /* Stack items vertically */
+        gap: 1rem; /* Space between player list and chat */
+        width: 300px; /* Fixed width for the sidebar */
+        flex-shrink: 0; /* Prevent sidebar from shrinking */
+     }
+    .player-list {
+        width: 100%; /* Take full width of sidebar */
+        background-color: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        padding: 1.5rem;
+        box-sizing: border-box; /* Include padding in width */
+
+        h2 {
+          color: #2c3e50;
+          margin-top: 0; /* Remove default margin */
+          margin-bottom: 1rem;
+        }
+
+        ul {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+
+          li {
+            padding: 0.5rem;
+            border-bottom: 1px solid #e9ecef;
+            color: #2c3e50;
+
+            &:last-child {
+              border-bottom: none;
+            }
+            .submitted-check, .ready-check { /* Combined styles */
+              color: green;
+              font-weight: bold;
+              margin-left: 5px;
+            }
+          }
+        }
+    }
+    .chat-area { 
+        width: 100%; /* Take full width of sidebar */
+        background-color: #f0f0f0;
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        height: 300px; /* Adjust height as needed */
+        box-sizing: border-box; /* Include padding in width */
+         h2 {
+           color: #2c3e50;
+           margin-top: 0;
+           margin-bottom: 1rem;
+         }
+    }
+    .chat-messages {
+        flex-grow: 1;
+        overflow-y: auto; /* Make messages scrollable */
+        margin-bottom: 10px;
+        border: 1px solid #ccc;
+        padding: 5px;
+        background-color: white;
+    }
+     .chat-message { margin-bottom: 5px; }
+     .chat-user { font-weight: bold; margin-right: 5px; }
+     .chat-input { display: flex; gap: 5px; }
+     .chat-input input { flex-grow: 1; padding: 5px; border: 1px solid #ccc; border-radius: 3px;}
+     .chat-input button { padding: 5px 10px; cursor: pointer; }
   `]
 })
 export class RoomViewComponent implements OnInit, OnDestroy {
@@ -419,10 +514,13 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   draggedWord: WordItem | null = null; // Word dragged from bank
   draggedSentenceWordIndex: number | null = null; // Index of word dragged from sentence
   generatedSentence: string = '';
+  chatMessages: { user: string, message: string }[] = [];
+  newMessage: string = '';
   private playersSubscription?: Subscription;
   private routeSubscription?: Subscription; 
   private gameStateSubscription?: Subscription; 
   private playerNameSubscription?: Subscription; 
+  private chatSubscription?: Subscription; // Add chat subscription
 
   constructor(
     private route: ActivatedRoute, 
@@ -476,13 +574,19 @@ export class RoomViewComponent implements OnInit, OnDestroy {
                 this.sentenceWords = [];
                 this.generatedSentence = '';
                 // Reset available words as well for the new round
-                this.updateAvailableWords(state.availableWords); 
+              this.updateAvailableWords(state.availableWords); 
             }
         } else {
              this.sentenceWords = []; // Clear sentence on state reset
              this.generatedSentence = '';
         }
     });
+
+     // Subscribe to Chat Messages
+     this.chatSubscription = this.signalRService.getChatMessagesObservable().subscribe(messages => {
+         this.chatMessages = messages;
+         // TODO: Add auto-scrolling to bottom
+     });
   }
 
   ngOnDestroy() {
@@ -490,6 +594,7 @@ export class RoomViewComponent implements OnInit, OnDestroy {
     this.routeSubscription?.unsubscribe(); 
     this.gameStateSubscription?.unsubscribe(); 
     this.playerNameSubscription?.unsubscribe(); 
+    this.chatSubscription?.unsubscribe(); // Unsubscribe from chat
     // Call leaveRoom when the component is destroyed
     this.signalRService.leaveRoom().catch(err => console.error("Error leaving room on destroy:", err));
   }
@@ -505,7 +610,7 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   async leaveRoom() {
     try {
       await this.signalRService.leaveRoom();
-      this.router.navigate(['/main']); 
+      this.router.navigate(['/rooms']); // Navigate to room list page
     } catch (error) {
       console.error('Error leaving room:', error);
     }
@@ -731,5 +836,16 @@ export class RoomViewComponent implements OnInit, OnDestroy {
    // Helper to check if a player is in the ready list
    isPlayerReady(playerName: string): boolean {
        return !!this.gameState?.readyPlayers?.includes(playerName);
+   }
+
+   // Method to send chat message
+   sendMessage() {
+       if (this.newMessage.trim()) {
+           this.signalRService.sendMessage(this.newMessage.trim())
+               .then(() => {
+                   this.newMessage = ''; // Clear input on success
+               })
+               .catch(err => console.error("Error sending message:", err));
+       }
    }
 }

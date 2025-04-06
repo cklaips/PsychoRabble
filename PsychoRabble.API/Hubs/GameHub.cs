@@ -334,5 +334,25 @@ namespace PsychoRabble.API.Hubs
             // Broadcast the updated game state (shows who is ready, or starts new round)
             await Clients.Group(roomName).SendAsync("GameStateUpdated", gameState);
         }
+
+        public async Task SendMessage(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return; // Ignore empty messages
+            }
+
+            if (!_playerInfo.TryGetValue(Context.ConnectionId, out var playerInfo))
+            {
+                // Should not happen if player is connected and joined, but handle defensively
+                throw new HubException("Cannot send message: Player not found or not in a room.");
+            }
+
+            var roomName = playerInfo.RoomName;
+            var playerName = playerInfo.PlayerName;
+
+            // Send message to all clients in the same room (group)
+            await Clients.Group(roomName).SendAsync("ReceiveMessage", playerName, message);
+        }
     }
 }
