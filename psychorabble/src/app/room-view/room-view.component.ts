@@ -10,7 +10,7 @@ import { VotingComponent } from '../voting/voting.component';
 interface WordItem {
   text: string;
   used: boolean;
-  isDraggedFromSentence?: boolean;
+  isDraggedFromSentence?: boolean; // This might not be needed anymore
 }
 
 @Component({
@@ -34,11 +34,11 @@ interface WordItem {
               <div 
                 *ngFor="let word of availableWords" 
                 class="word-item"
-                [class.used]="word.used"
-                [class.hidden]="word.used"
-                [class.dragged-from-sentence]="word.isDraggedFromSentence"
+                [class.hidden]="word.used" 
                 draggable="true"
                 (dragstart)="onDragStart($event, word)"
+                (dragend)="onDragEnd($event)" 
+                (dblclick)="addWordToSentence(word)"
               >
                 {{ word.text }}
               </div>
@@ -59,9 +59,11 @@ interface WordItem {
                 [class.shift-right]="hoverIndex !== null && i >= hoverIndex"
                 draggable="true"
                 (dragstart)="onSentenceWordDragStart($event, word, i)"
+                (dragend)="onDragEnd($event)" 
+                (dblclick)="removeWord(i)"
               >
                 {{ word }}
-                <span class="remove-word" (click)="removeWord(i)">×</span>
+                <span class="remove-word" (click)="removeWord(i)" title="Remove word">×</span>
               </div>
             </div>
             <div class="sentence-controls">
@@ -140,22 +142,22 @@ interface WordItem {
     .header {
       margin-bottom: 2rem;
       text-align: center;
-      position: relative; /* Added for button positioning */
+      position: relative; 
 
       h1 {
         margin: 0;
         color: #2c3e50;
         font-size: 2.5rem;
-        display: inline-block; /* Allow button beside it */
-        margin-right: 1rem; /* Space for button */
+        display: inline-block; 
+        margin-right: 1rem; 
       }
-      .current-player-name { /* Style for name display */
+      .current-player-name { 
           font-size: 0.9rem;
           color: #555;
           margin-left: 10px;
           font-style: italic;
       }
-       .leave-button { /* Style for the leave button */
+       .leave-button { 
         padding: 0.5rem 1rem;
         background-color: #e74c3c;
         color: white;
@@ -163,9 +165,9 @@ interface WordItem {
         border-radius: 5px;
         cursor: pointer;
         font-size: 0.9rem;
-        position: absolute; /* Position relative to header */
-        top: 10px; /* Adjust as needed */
-        right: 10px; /* Adjust as needed */
+        position: absolute; 
+        top: 10px; 
+        right: 10px; 
         transition: background-color 0.3s ease;
 
         &:hover {
@@ -174,7 +176,7 @@ interface WordItem {
       }
     }
 
-    .name-entry { /* Keep styles even if element removed from this template */
+    .name-entry { 
       display: flex;
       justify-content: center;
       align-items: center;
@@ -237,7 +239,7 @@ interface WordItem {
       border-radius: 20px;
       cursor: move;
       user-select: none;
-      transition: all 0.3s ease;
+      transition: opacity 0.3s ease, visibility 0.3s ease; /* Added transition */
       opacity: 1;
       visibility: visible;
 
@@ -245,17 +247,12 @@ interface WordItem {
         background-color: #2980b9;
       }
 
-      &.used {
+      &.hidden { /* Renamed from .used for clarity */
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
       }
-
-      &.dragged-from-sentence {
-        background-color: #3498db;
-        transform: scale(0.9);
-        opacity: 0.8;
-      }
+      /* Removed .dragging and .dragged-from-sentence */
     }
 
     .sentence-area {
@@ -287,6 +284,7 @@ interface WordItem {
       gap: 0.5rem;
       position: relative;
       transition: all 0.3s ease;
+      cursor: move; /* Add move cursor */
 
       &.shift-right {
         transform: translateX(1rem);
@@ -311,7 +309,7 @@ interface WordItem {
       align-items: center;
     }
 
-    .submit-button, .ready-button { /* Shared styles */
+    .submit-button, .ready-button { 
       background-color: #3498db;
       color: white;
       border: none;
@@ -330,7 +328,7 @@ interface WordItem {
         cursor: not-allowed;
       }
     }
-     .ready-button { /* Specific styles */
+     .ready-button { 
         background-color: #2ecc71; 
          &:hover:not(:disabled) {
             background-color: #27ae60;
@@ -374,7 +372,7 @@ interface WordItem {
           &:last-child {
             border-bottom: none;
           }
-          .submitted-check, .ready-check { /* Combined styles */
+          .submitted-check, .ready-check { 
             color: green;
             font-weight: bold;
             margin-left: 5px;
@@ -382,7 +380,7 @@ interface WordItem {
         }
       }
     }
-    .voting-area, .results-area { /* Basic styling for voting/results area */
+    .voting-area, .results-area { 
        flex: 1;
        background-color: white;
        border-radius: 12px;
@@ -405,7 +403,12 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   ];
   sentenceWords: string[] = [];
   hoverIndex: number | null = null;
-  draggedWord: WordItem | null = null;
+  // Remove draggedWord and draggedSentenceWordIndex properties as they are handled differently now
+  // draggedWord: WordItem | null = null; 
+  // draggedSentenceWordIndex: number | null = null; 
+  draggedWordText: string | null = null; // Store text of dragged item
+  isDraggingFromSentence: boolean = false; // Flag if drag started from sentence
+
   generatedSentence: string = '';
   private playersSubscription?: Subscription;
   private routeSubscription?: Subscription; 
@@ -425,7 +428,6 @@ export class RoomViewComponent implements OnInit, OnDestroy {
             this.playerName = name;
             console.log(`Player name set by service: ${this.playerName}`);
         } else {
-             // Fallback if name not received from service (e.g., refresh before JoinedRoom event)
              this.playerName = localStorage.getItem('playerName') || 'UnknownPlayer';
              console.warn(`Player name retrieved from localStorage as fallback: ${this.playerName}`);
         }
@@ -436,10 +438,7 @@ export class RoomViewComponent implements OnInit, OnDestroy {
       this.roomName = params['id']; 
       if (!this.roomName) {
            console.error("Room name missing on init.");
-           // Redirect? this.router.navigate(['/']); 
       } else {
-          // Fetch initial game state for the room upon loading.
-          // Note: Player should already be joined from MainPageComponent
           this.signalRService.getGameState().then(state => {
               this.gameState = state;
               if (state) {
@@ -453,19 +452,19 @@ export class RoomViewComponent implements OnInit, OnDestroy {
       this.players = players;
     });
 
-    // Subscribe to GameState updates (initial state also pushed by JoinedRoom handler in service)
+    // Subscribe to GameState updates
     this.gameStateSubscription = this.signalRService.getGameStateObservable().subscribe(state => {
-        console.log("GameState updated:", state); // Log state updates
+        console.log("GameState updated:", state); 
         this.gameState = state;
         if (state) {
             this.updateAvailableWords(state.availableWords);
-            // Reset sentence if phase changed back to SUBMITTING
             if (state.currentPhase === 'SUBMITTING') {
                 this.sentenceWords = [];
                 this.generatedSentence = '';
+                this.updateAvailableWords(state.availableWords); 
             }
         } else {
-             this.sentenceWords = []; // Clear sentence on state reset
+             this.sentenceWords = []; 
              this.generatedSentence = '';
         }
     });
@@ -476,8 +475,14 @@ export class RoomViewComponent implements OnInit, OnDestroy {
     this.routeSubscription?.unsubscribe(); 
     this.gameStateSubscription?.unsubscribe(); 
     this.playerNameSubscription?.unsubscribe(); 
-    // Call leaveRoom when the component is destroyed
     this.signalRService.leaveRoom().catch(err => console.error("Error leaving room on destroy:", err));
+  }
+
+  addWordToSentence(word: WordItem) {
+    if (!word.used) {
+      word.used = true; // Mark as used in the available list
+      this.sentenceWords.push(word.text);
+    }
   }
 
   async leaveRoom() {
@@ -489,40 +494,55 @@ export class RoomViewComponent implements OnInit, OnDestroy {
     }
   }
 
+  // Drag from Word Bank
   onDragStart(event: DragEvent, word: WordItem) {
     if (word.used) {
       event.preventDefault();
       return;
     }
-    this.draggedWord = word;
+    this.isDraggingFromSentence = false;
+    this.draggedWordText = word.text; 
+    // Mark as used immediately for visual feedback
+    word.used = true; 
     if (event.dataTransfer) {
       event.dataTransfer.setData('text/plain', word.text);
       event.dataTransfer.effectAllowed = 'move';
     }
   }
 
-  onDragEnd(event: DragEvent) {
-    if (this.draggedWord && event.dataTransfer?.dropEffect === 'move') {
-       // Word was successfully dropped in a valid target (sentence container)
-    } else {
-       // Drop was cancelled or occurred outside a valid target
-       if(this.draggedWord) {
-           // If dragged from bank, mark unused; if from sentence, it was already removed
-           const wordItem = this.availableWords.find(w => w.text === this.draggedWord?.text);
-           if (wordItem) wordItem.used = false; 
-       }
-    }
-    this.draggedWord = null;
+  // Drag from Sentence Area
+  onSentenceWordDragStart(event: DragEvent, word: string, index: number) {
+     this.isDraggingFromSentence = true;
+     this.draggedWordText = word; 
+     // Find the corresponding item in availableWords and mark it used (it should be already, but just in case)
+     const wordItem = this.availableWords.find(w => w.text === word);
+     if (wordItem) wordItem.used = true; 
+     
+     // Remove from sentence array immediately for visual feedback during drag
+     this.sentenceWords.splice(index, 1); 
+
+     if (event.dataTransfer) {
+       event.dataTransfer.setData('text/plain', word);
+       event.dataTransfer.effectAllowed = 'move';
+     }
   }
 
-  onSentenceWordDragStart(event: DragEvent, word: string, index: number) {
-    if (event.dataTransfer) {
-      event.dataTransfer.setData('text/plain', word);
-      event.dataTransfer.effectAllowed = 'move';
-      // Temporarily remove from sentence
-      this.sentenceWords.splice(index, 1); 
+  onDragEnd(event: DragEvent) {
+    // If drag failed (not dropped in a valid zone)
+    if (event.dataTransfer?.dropEffect !== 'move' && this.draggedWordText) {
+       // Find the word in availableWords and mark it as unused
+       const wordItem = this.availableWords.find(w => w.text === this.draggedWordText);
+       if (wordItem) {
+           wordItem.used = false;
+       }
+       // If it was dragged from the sentence, it was already removed in onSentenceWordDragStart,
+       // so setting used=false makes it available again correctly.
     }
+    // Clear drag state
+    this.draggedWordText = null; 
+    this.isDraggingFromSentence = false;
   }
+
 
   onDragOver(event: DragEvent) {
     event.preventDefault();
@@ -553,26 +573,29 @@ export class RoomViewComponent implements OnInit, OnDestroy {
 
   onDrop(event: DragEvent) {
     event.preventDefault();
+    const currentHoverIndex = this.hoverIndex; 
     this.hoverIndex = null; 
     if (!event.dataTransfer) return;
     const text = event.dataTransfer.getData('text/plain');
     if (!text) return;
 
-    const wordItem = this.availableWords.find(w => w.text === text && !w.used);
-    const insertIndex = this.hoverIndex !== null ? this.hoverIndex : this.sentenceWords.length;
+    // Use the captured hover index for insertion point calculation
+    const insertIndex = currentHoverIndex !== null ? currentHoverIndex : this.sentenceWords.length;
 
-    if (wordItem) { // Word came from the bank
+    // Regardless of origin, just insert the word text at the calculated index
+    // The 'used' status was handled in onDragStart / onSentenceWordDragStart
+    // If it was dragged from the sentence, it was already removed in onSentenceWordDragStart
+    this.sentenceWords.splice(insertIndex, 0, text);
+
+    // Ensure the corresponding item in availableWords is marked as used
+    const wordItem = this.availableWords.find(w => w.text === text);
+    if (wordItem) {
         wordItem.used = true;
-        this.sentenceWords.splice(insertIndex, 0, text);
-    } else { // Word came from the sentence (reordering) or was invalid
-         // Check if it exists in available words at all (means it was dragged from sentence)
-         const existingWord = this.availableWords.find(w => w.text === text);
-         if (existingWord) {
-             // Insert it back into the sentence
-             this.sentenceWords.splice(insertIndex, 0, text);
-             existingWord.used = true; // Ensure it's marked used
-         }
     }
+
+    // Clear drag state AFTER processing drop
+    this.draggedWordText = null; 
+    this.isDraggingFromSentence = false;
   }
 
   removeWord(index: number) {
@@ -609,21 +632,17 @@ export class RoomViewComponent implements OnInit, OnDestroy {
 
    updateAvailableWords(wordsFromState: string[]) {
        // Reset used status based on current sentence and available words from state
-       // This assumes wordsFromState is the definitive list for the current round/phase
        this.availableWords = wordsFromState.map(wordText => ({
            text: wordText,
            used: this.sentenceWords.includes(wordText) 
        }));
    }
 
-   // Method to call the service for readying up
    readyUp() {
        this.signalRService.readyUp()
            .catch(err => console.error("Error calling readyUp:", err));
-       // Optionally disable button immediately after click
    }
 
-   // Helper to check if a player is in the ready list
    isPlayerReady(playerName: string): boolean {
        return !!this.gameState?.readyPlayers?.includes(playerName);
    }
