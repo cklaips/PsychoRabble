@@ -413,10 +413,7 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   playerName: string = ''; 
   players: string[] = [];
   gameState: GameState | null = null; 
-
-  availableWords: WordItem[] = [
-    { text: 'The', used: false }, { text: 'quick', used: false }, { text: 'brown', used: false }, { text: 'fox', used: false }, { text: 'jumps', used: false }, { text: 'over', used: false }, { text: 'lazy', used: false }, { text: 'dog', used: false }, { text: 'in', used: false }, { text: 'the', used: false }, { text: 'park', used: false }, { text: 'today', used: false }
-  ];
+  availableWords: WordItem[] = []; // Initialize as empty, will be populated by server state
   sentenceWords: string[] = [];
   hoverIndex: number | null = null;
   draggedWord: WordItem | null = null; // Word dragged from bank
@@ -657,9 +654,45 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   }
 
   onSubmit() {
-    this.generatedSentence = this.sentenceWords.join(' ');
+    // Process sentence for prefixes/suffixes
+    let finalSentenceParts: string[] = [];
+    for (let i = 0; i < this.sentenceWords.length; i++) {
+      const currentWord = this.sentenceWords[i];
+      const prevWord = finalSentenceParts.length > 0 ? finalSentenceParts[finalSentenceParts.length - 1] : null;
+      const nextWord = i + 1 < this.sentenceWords.length ? this.sentenceWords[i + 1] : null;
+
+      if (currentWord.startsWith('-')) { // It's a suffix
+        const suffix = currentWord.substring(1); // Remove leading '-'
+        if (prevWord && finalSentenceParts.length > 0) {
+          // Append to the previous part if it's not already a prefix/suffix
+           if (!prevWord.endsWith('-') && !prevWord.startsWith('-')) {
+               finalSentenceParts[finalSentenceParts.length - 1] += suffix; 
+           } else {
+                finalSentenceParts.push(suffix); // Add suffix as its own word if previous was prefix/suffix
+           }
+        } else {
+          finalSentenceParts.push(suffix); // Add suffix as its own word if it's the first word
+        }
+      } else if (currentWord.endsWith('-')) { // It's a prefix
+        const prefix = currentWord.substring(0, currentWord.length - 1); // Remove trailing '-'
+        if (nextWord && !nextWord.startsWith('-')) { // Check if next word exists and is not a suffix
+          // Prepend to the next word and add the combined word now, skip next word iteration
+          finalSentenceParts.push(prefix + nextWord);
+          i++; // Skip the next word since we've combined it
+        } else {
+          finalSentenceParts.push(prefix); // Add prefix as its own word
+        }
+      } else { // It's a regular word
+        finalSentenceParts.push(currentWord);
+      }
+    }
+
+    this.generatedSentence = finalSentenceParts.join(' '); // Join with spaces
+
+    // Send the processed sentence to the server
     this.signalRService.submitSentence(this.generatedSentence)
         .catch(err => console.error("Error submitting sentence:", err));
+    // Optionally disable button after submitting
   }
 
   hasPlayerSubmitted(playerName: string): boolean {
@@ -680,10 +713,11 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   }
 
    updateAvailableWords(wordsFromState: string[]) {
+       console.log("updateAvailableWords received from server:", wordsFromState); // Log received words
        // Reset used status based on current sentence and available words from state
        this.availableWords = wordsFromState.map(wordText => ({
            text: wordText,
-           used: this.sentenceWords.includes(wordText) 
+           used: this.sentenceWords.includes(wordText)
        }));
    }
 

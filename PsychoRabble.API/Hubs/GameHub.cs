@@ -30,11 +30,12 @@ namespace PsychoRabble.API.Hubs
             _rooms[roomName] = room;
             _gameStates[roomName] = new GameState
             {
-                // Initialize with some default words or leave empty
+                // Initialize with regular words, prefixes, and suffixes
                 AvailableWords = new List<string> 
                 {
                     "The", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
-                    "in", "the", "park", "today", "happy", "sunny", "day", "play"
+                    "in", "the", "park", "today", "happy", "sunny", "day", "play",
+                    "-ly", "-ing", "-s", "un-", "re-" // Added prefixes/suffixes
                 } 
             };
 
