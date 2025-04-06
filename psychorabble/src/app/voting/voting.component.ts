@@ -14,18 +14,19 @@ import { CommonModule } from '@angular/common';
       <ul>
         <li *ngFor="let sentence of submittedSentencesArray">
           <div class="sentence-entry">
-            <span class="sentence-text">"{{ sentence.value }}"</span>
-            <!-- Show author only in results phase -->
-            <span class="sentence-author" *ngIf="gamePhase === 'RESULTS'">- {{ sentence.key }}</span>
-             <!-- Show votes only in results phase -->
-            <span class="votes" *ngIf="gamePhase === 'RESULTS'">{{ getStars(votes[sentence.key] || 0) }}</span>
-            <!-- Show vote button only in voting phase -->
-            <button 
-              *ngIf="gamePhase === 'VOTING'"
-              (click)="castVote(sentence.key)" 
-              [disabled]="hasVoted || sentence.key === currentPlayerName"> 
-              Vote
-            </button>
+             <!-- Column 1: Votes (only in results) -->
+             <span class="votes" *ngIf="gamePhase === 'RESULTS'">{{ getStars(votes[sentence.key] || 0) }}</span>
+             <!-- Column 2: Sentence -->
+             <span class="sentence-text">"{{ sentence.value }}"</span>
+             <!-- Column 3: Author (only in results) -->
+             <span class="sentence-author" *ngIf="gamePhase === 'RESULTS'">{{ sentence.key }}</span>
+             <!-- Vote Button (only in voting) -->
+             <button 
+               *ngIf="gamePhase === 'VOTING'"
+               (click)="castVote(sentence.key)" 
+               [disabled]="hasVoted || sentence.key === currentPlayerName"> 
+               Vote
+             </button>
           </div>
         </li>
       </ul>
@@ -35,9 +36,28 @@ import { CommonModule } from '@angular/common';
   styles: [`
     ul { list-style: none; padding: 0; }
     li { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
-    .sentence-entry { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .sentence-text { font-style: italic; flex-grow: 1; }
-    .sentence-author { font-size: 0.9em; color: #555; }
+    .sentence-entry { 
+        display: flex; 
+        align-items: center; 
+        gap: 15px; /* Increased gap */
+        /* Removed flex-wrap: wrap; to keep columns */
+    }
+    .votes { 
+        min-width: 60px; /* Give stars some space */
+        text-align: right; 
+        font-size: 1.1em; /* Make stars slightly bigger */
+    }
+    .sentence-text { 
+        font-style: italic; 
+        flex-grow: 1; /* Allow sentence to take up remaining space */
+        text-align: left; /* Ensure left alignment */
+    }
+    .sentence-author { 
+        font-size: 0.9em; 
+        color: #555; 
+        min-width: 80px; /* Give author name some space */
+        text-align: left;
+    }
     button { 
         padding: 5px 10px; 
         cursor: pointer; 

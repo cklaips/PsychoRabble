@@ -25,8 +25,8 @@ interface WordItem {
         <button class="leave-button" (click)="leaveRoom()">Leave Room</button>
       </div>
       
-      <div class="main-content">
-        <!-- Conditionally show game area or voting area -->
+      <!-- Main Content Area (Game/Vote/Results) -->
+      <div class="main-content-area"> 
         <div *ngIf="gameState?.currentPhase === 'SUBMITTING'" class="game-area">
           <div class="word-bank">
             <h2>Available Words:</h2>
@@ -83,7 +83,6 @@ interface WordItem {
           </div>
         </div>
 
-         <!-- Voting Area -->
          <div *ngIf="gameState?.currentPhase === 'VOTING' && gameState" class="voting-area">
            <h2>Vote for the best sentence!</h2>
            <app-voting 
@@ -95,7 +94,6 @@ interface WordItem {
            </app-voting>
          </div>
 
-         <!-- Results Area -->
           <div *ngIf="gameState?.currentPhase === 'RESULTS' && gameState" class="results-area voting-area"> 
             <h2>Results:</h2>
              <app-voting 
@@ -103,7 +101,7 @@ interface WordItem {
                [currentPlayerName]="playerName"
                [gamePhase]="gameState.currentPhase" 
                [votes]="gameState.votes"
-               (voteCast)="onVoteCast($event)"> <!-- voteCast won't do anything here, but keep binding -->
+               (voteCast)="onVoteCast($event)"> 
              </app-voting>
              <div class="winner-message" *ngIf="gameState.winners && gameState.winners.length > 0">
                 <h3>Winner(s): {{ gameState.winners.join(', ') }}! Congratulations!</h3>
@@ -118,46 +116,43 @@ interface WordItem {
                 {{ isPlayerReady(playerName) ? 'Ready!' : 'Ready for Next Round?' }}
              </button>
           </div>
+      </div> <!-- End Main Content Area -->
 
-        <!-- Sidebar Column -->
-        <div class="sidebar">
-            <div class="player-list">
-              <h2>Players in this room:</h2>
-              <ul>
-                 <li *ngFor="let player of players">
-               {{ player }} 
-               <span *ngIf="hasPlayerSubmitted(player)" class="submitted-check" title="Submitted">✓</span>
-               <span *ngIf="isPlayerReady(player)" class="ready-check" title="Ready">👍</span>
-                 </li>
-              </ul>
-            </div>
+      <!-- Lower Section for Player List and Chat -->
+      <div class="lower-section">
+          <div class="player-list">
+            <h2>Players in this room:</h2>
+            <ul>
+               <li *ngFor="let player of players">
+                 {{ player }} 
+                 <span *ngIf="hasPlayerSubmitted(player)" class="submitted-check" title="Submitted">✓</span>
+                 <span *ngIf="isPlayerReady(player)" class="ready-check" title="Ready">👍</span>
+               </li>
+            </ul>
+          </div>
 
-            <!-- Chat Area -->
-            <div class="chat-area">
-                <h2>Chat</h2>
-                <div class="chat-messages">
-                <div *ngFor="let msg of chatMessages" class="chat-message">
-                    <span class="chat-user">{{ msg.user }}:</span>
-                    <span class="chat-text">{{ msg.message }}</span>
-                </div>
-            </div>
-            <div class="chat-input">
-                <input 
-                    type="text" 
-                    placeholder="Type message..." 
-                    [(ngModel)]="newMessage" 
-                    (keydown.enter)="sendMessage()" />
-                <button (click)="sendMessage()" [disabled]="!newMessage.trim()">Send</button>
-            </div>
-            <!-- Removed duplicate chat-input div -->
-        </div> <!-- End Chat Area -->
-    </div> <!-- End Sidebar -->
+          <div class="chat-area">
+              <h2>Chat</h2>
+              <div class="chat-messages">
+              <div *ngFor="let msg of chatMessages" class="chat-message">
+                  <span class="chat-user">{{ msg.user }}:</span>
+                  <span class="chat-text">{{ msg.message }}</span>
+              </div>
+          </div>
+          <div class="chat-input">
+              <input 
+                  type="text" 
+                  placeholder="Type message..." 
+                  [(ngModel)]="newMessage" 
+                  (keydown.enter)="sendMessage()" />
+              <button (click)="sendMessage()" [disabled]="!newMessage.trim()">Send</button>
+          </div>
+          </div> 
+      </div> <!-- End Lower Section -->
 
-      </div> <!-- End Main Content -->
-    </div>
+    </div> <!-- End Container -->
   `,
   styles: [
-    // Styles remain the same as before...
     `.container {
       max-width: 1200px;
       margin: 0 auto;
@@ -166,34 +161,36 @@ interface WordItem {
     }
 
     .header {
-      margin-bottom: 2rem;
-      text-align: center;
-      position: relative; /* Added for button positioning */
+      margin-bottom: 1rem; /* Reduced margin */
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      position: relative; 
 
       h1 {
         margin: 0;
         color: #2c3e50;
-        font-size: 2.5rem;
-        display: inline-block; /* Allow button beside it */
-        margin-right: 1rem; /* Space for button */
+        font-size: 2.2rem; /* Slightly smaller */
+        display: inline-block; 
+        margin-right: 1rem; 
       }
-      .current-player-name { /* Style for name display */
+      .current-player-name { 
           font-size: 0.9rem;
           color: #555;
           margin-left: 10px;
           font-style: italic;
       }
-       .leave-button { /* Style for the leave button */
-        padding: 0.5rem 1rem;
+       .leave-button { 
+        padding: 0.4rem 0.8rem; /* Slightly smaller padding */
         background-color: #e74c3c;
         color: white;
         border: none;
         border-radius: 5px;
         cursor: pointer;
-        font-size: 0.9rem;
-        position: absolute; /* Position relative to header */
-        top: 10px; /* Adjust as needed */
-        right: 10px; /* Adjust as needed */
+        font-size: 0.8rem; /* Slightly smaller font */
+        position: absolute; 
+        top: 5px; /* Adjusted position */
+        right: 5px; 
         transition: background-color 0.3s ease;
 
         &:hover {
@@ -202,37 +199,11 @@ interface WordItem {
       }
     }
 
-    .name-entry { /* Keep styles even if element removed from this template */
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin-bottom: 20px;
-    }
+     .main-content-area { 
+        margin-bottom: 2rem; 
+     }
 
-    .name-entry input {
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 5px;
-      margin-right: 10px;
-    }
-
-    .name-entry button {
-      padding: 10px 20px;
-      background-color: #5cb85c;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    .main-content {
-      display: flex; /* Use flexbox for column layout */
-      gap: 2rem;
-      align-items: flex-start; /* Align items at the top */
-    }
-
-    .game-area, .voting-area, .results-area { /* Game/Voting/Results take up flexible space */
-      flex: 1;
+    .game-area, .voting-area, .results-area { 
       background-color: white;
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -285,8 +256,8 @@ interface WordItem {
         opacity: 0.8;
       }
       
-      &.dragging { /* Style for the word being actively dragged */
-        opacity: 0; /* Hide the original element completely */
+      &.dragging { 
+        opacity: 0; 
         visibility: hidden; 
       }
     }
@@ -335,7 +306,7 @@ interface WordItem {
         }
       }
       
-      &.dragging { /* Add dragging style for sentence words too */
+      &.dragging { 
         opacity: 0; 
         visibility: hidden; 
       }
@@ -349,7 +320,7 @@ interface WordItem {
       align-items: center;
     }
 
-    .submit-button, .ready-button { /* Shared styles */
+    .submit-button, .ready-button { 
       background-color: #3498db;
       color: white;
       border: none;
@@ -368,7 +339,7 @@ interface WordItem {
         cursor: not-allowed;
       }
     }
-     .ready-button { /* Specific styles */
+     .ready-button { 
         background-color: #2ecc71; 
          &:hover:not(:disabled) {
             background-color: #27ae60;
@@ -386,23 +357,38 @@ interface WordItem {
       max-width: 100%;
       word-wrap: break-word;
     }
+    
+     .lower-section { /* Container for player list and chat */
+        display: flex;
+        gap: 2rem;
+        align-items: flex-start; 
+     }
 
     .player-list {
-      width: 250px;
+      width: 300px; 
+      flex-shrink: 0; 
       background-color: white;
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
       padding: 1.5rem;
+      box-sizing: border-box; 
+      height: 250px; /* Reduced height */
+      display: flex; /* Added flex to allow scroll */
+      flex-direction: column; /* Stack header and list */
 
       h2 {
         color: #2c3e50;
+        margin-top: 0; 
         margin-bottom: 1rem;
+        flex-shrink: 0; /* Prevent header from shrinking */
       }
 
       ul {
         list-style: none;
         padding: 0;
         margin: 0;
+        overflow-y: auto; /* Make player list scrollable */
+        flex-grow: 1; /* Allow list to take remaining space */
 
         li {
           padding: 0.5rem;
@@ -412,7 +398,7 @@ interface WordItem {
           &:last-child {
             border-bottom: none;
           }
-          .submitted-check, .ready-check { /* Combined styles */
+          .submitted-check, .ready-check { 
             color: green;
             font-weight: bold;
             margin-left: 5px;
@@ -420,8 +406,7 @@ interface WordItem {
         }
       }
     }
-    .voting-area, .results-area { /* Basic styling for voting/results area */
-       flex: 1;
+    .voting-area, .results-area { 
        background-color: white;
        border-radius: 12px;
        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -429,59 +414,18 @@ interface WordItem {
        ul { list-style: none; padding: 0; }
        li { margin-bottom: 10px; }
        .winner-message { margin-top: 20px; text-align: center; }
-       .ready-button { margin-top: 15px; } /* Add margin to ready button */
+       .ready-button { margin-top: 15px; } 
     }
-     .sidebar { /* Container for player list and chat */
-        display: flex;
-        flex-direction: column; /* Stack items vertically */
-        gap: 1rem; /* Space between player list and chat */
-        width: 300px; /* Fixed width for the sidebar */
-        flex-shrink: 0; /* Prevent sidebar from shrinking */
-     }
-    .player-list {
-        width: 100%; /* Take full width of sidebar */
-        background-color: white;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        padding: 1.5rem;
-        box-sizing: border-box; /* Include padding in width */
-
-        h2 {
-          color: #2c3e50;
-          margin-top: 0; /* Remove default margin */
-          margin-bottom: 1rem;
-        }
-
-        ul {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-
-          li {
-            padding: 0.5rem;
-            border-bottom: 1px solid #e9ecef;
-            color: #2c3e50;
-
-            &:last-child {
-              border-bottom: none;
-            }
-            .submitted-check, .ready-check { /* Combined styles */
-              color: green;
-              font-weight: bold;
-              margin-left: 5px;
-            }
-          }
-        }
-    }
+     /* Removed old .sidebar style */
     .chat-area { 
-        width: 100%; /* Take full width of sidebar */
+        flex-grow: 1; 
         background-color: #f0f0f0;
         border-radius: 8px;
         padding: 1rem;
         display: flex;
         flex-direction: column;
-        height: 300px; /* Adjust height as needed */
-        box-sizing: border-box; /* Include padding in width */
+        height: 250px; /* Reduced height */
+        box-sizing: border-box; 
          h2 {
            color: #2c3e50;
            margin-top: 0;
@@ -490,7 +434,7 @@ interface WordItem {
     }
     .chat-messages {
         flex-grow: 1;
-        overflow-y: auto; /* Make messages scrollable */
+        overflow-y: auto; 
         margin-bottom: 10px;
         border: 1px solid #ccc;
         padding: 5px;
@@ -508,11 +452,11 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   playerName: string = ''; 
   players: string[] = [];
   gameState: GameState | null = null; 
-  availableWords: WordItem[] = []; // Initialize as empty, will be populated by server state
+  availableWords: WordItem[] = []; 
   sentenceWords: string[] = [];
   hoverIndex: number | null = null;
-  draggedWord: WordItem | null = null; // Word dragged from bank
-  draggedSentenceWordIndex: number | null = null; // Index of word dragged from sentence
+  draggedWord: WordItem | null = null; 
+  draggedSentenceWordIndex: number | null = null; 
   generatedSentence: string = '';
   chatMessages: { user: string, message: string }[] = [];
   newMessage: string = '';
@@ -520,7 +464,7 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   private routeSubscription?: Subscription; 
   private gameStateSubscription?: Subscription; 
   private playerNameSubscription?: Subscription; 
-  private chatSubscription?: Subscription; // Add chat subscription
+  private chatSubscription?: Subscription; 
 
   constructor(
     private route: ActivatedRoute, 
@@ -529,27 +473,21 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
-    // Get player name confirmed by the server after joining
     this.playerNameSubscription = this.signalRService.getCurrentPlayerNameObservable().subscribe(name => {
         if (name) {
             this.playerName = name;
             console.log(`Player name set by service: ${this.playerName}`);
         } else {
-             // Fallback if name not received from service (e.g., refresh before JoinedRoom event)
              this.playerName = localStorage.getItem('playerName') || 'UnknownPlayer';
              console.warn(`Player name retrieved from localStorage as fallback: ${this.playerName}`);
         }
     });
 
-    // Get room name from route
     this.routeSubscription = this.route.params.subscribe(params => { 
       this.roomName = params['id']; 
       if (!this.roomName) {
            console.error("Room name missing on init.");
-           // Redirect? this.router.navigate(['/']); 
       } else {
-          // Fetch initial game state for the room upon loading.
-          // Note: Player should already be joined from MainPageComponent
           this.signalRService.getGameState().then(state => {
               this.gameState = state;
               if (state) {
@@ -563,29 +501,24 @@ export class RoomViewComponent implements OnInit, OnDestroy {
       this.players = players;
     });
 
-    // Subscribe to GameState updates (initial state also pushed by JoinedRoom handler in service)
     this.gameStateSubscription = this.signalRService.getGameStateObservable().subscribe(state => {
-        console.log("GameState updated:", state); // Log state updates
+        console.log("GameState updated:", state); 
         this.gameState = state;
         if (state) {
             this.updateAvailableWords(state.availableWords);
-            // Reset sentence if phase changed back to SUBMITTING
             if (state.currentPhase === 'SUBMITTING') {
                 this.sentenceWords = [];
                 this.generatedSentence = '';
-                // Reset available words as well for the new round
-              this.updateAvailableWords(state.availableWords); 
+                this.updateAvailableWords(state.availableWords); 
             }
         } else {
-             this.sentenceWords = []; // Clear sentence on state reset
+             this.sentenceWords = []; 
              this.generatedSentence = '';
         }
     });
 
-     // Subscribe to Chat Messages
      this.chatSubscription = this.signalRService.getChatMessagesObservable().subscribe(messages => {
          this.chatMessages = messages;
-         // TODO: Add auto-scrolling to bottom
      });
   }
 
@@ -594,12 +527,10 @@ export class RoomViewComponent implements OnInit, OnDestroy {
     this.routeSubscription?.unsubscribe(); 
     this.gameStateSubscription?.unsubscribe(); 
     this.playerNameSubscription?.unsubscribe(); 
-    this.chatSubscription?.unsubscribe(); // Unsubscribe from chat
-    // Call leaveRoom when the component is destroyed
+    this.chatSubscription?.unsubscribe(); 
     this.signalRService.leaveRoom().catch(err => console.error("Error leaving room on destroy:", err));
   }
 
-  // Add word to sentence on double-click
   addWordToSentence(word: WordItem) {
     if (!word.used) {
       word.used = true;
@@ -610,7 +541,7 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   async leaveRoom() {
     try {
       await this.signalRService.leaveRoom();
-      this.router.navigate(['/rooms']); // Navigate to room list page
+      this.router.navigate(['/rooms']); 
     } catch (error) {
       console.error('Error leaving room:', error);
     }
@@ -621,11 +552,9 @@ export class RoomViewComponent implements OnInit, OnDestroy {
       event.preventDefault();
       return;
     }
-    // Add dragging class to the source element
     (event.target as HTMLElement).classList.add('dragging');
-
     this.draggedWord = word;
-    this.draggedSentenceWordIndex = null; // Clear sentence drag state
+    this.draggedSentenceWordIndex = null; 
     if (event.dataTransfer) {
       event.dataTransfer.setData('text/plain', word.text);
       event.dataTransfer.effectAllowed = 'move';
@@ -633,35 +562,24 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   }
 
   onDragEnd(event: DragEvent) {
-     // Remove dragging class from the source element
     (event.target as HTMLElement).classList.remove('dragging');
-
-    // If a drag from the sentence was started but not successfully dropped in onDrop,
-    // return the word to the available list.
     if (this.draggedSentenceWordIndex !== null && event.dataTransfer?.dropEffect !== 'move') { 
-        // Word was dragged from sentence but dropped outside target
-        // Check if index is valid before accessing sentenceWords
         if (this.draggedSentenceWordIndex !== null && this.draggedSentenceWordIndex >= 0 && this.draggedSentenceWordIndex < this.sentenceWords.length) {
             const wordText = this.sentenceWords[this.draggedSentenceWordIndex]; 
-            // Remove from sentence FIRST
             this.sentenceWords.splice(this.draggedSentenceWordIndex, 1); 
-            // Then make it available again
             if (wordText) {
                 const wordItem = this.availableWords.find(w => w.text === wordText);
                 if (wordItem) {
                     wordItem.used = false; 
                 }
             }
-        } else if (this.draggedSentenceWordIndex !== null) { // Index might be invalid if array changed mid-drag? Log warning.
+        } else if (this.draggedSentenceWordIndex !== null) { 
              console.warn("draggedSentenceWordIndex was invalid or null in onDragEnd during sentence drag cleanup.");
         }
     } 
-    // If a drag from the bank was started but not successfully dropped
     else if (this.draggedWord && event.dataTransfer?.dropEffect !== 'move') {
        this.draggedWord.used = false; 
     }
-    
-    // Clear drag state regardless of success
     this.draggedWord = null; 
     this.draggedSentenceWordIndex = null; 
   }
@@ -670,9 +588,8 @@ export class RoomViewComponent implements OnInit, OnDestroy {
     if (event.dataTransfer) {
       event.dataTransfer.setData('text/plain', word);
       event.dataTransfer.effectAllowed = 'move';
-      this.draggedSentenceWordIndex = index; // Store index
-      this.draggedWord = null; // Clear bank drag state
-       // Add dragging class to the source element
+      this.draggedSentenceWordIndex = index; 
+      this.draggedWord = null; 
       (event.target as HTMLElement).classList.add('dragging');
     }
   }
@@ -706,44 +623,39 @@ export class RoomViewComponent implements OnInit, OnDestroy {
 
   onDrop(event: DragEvent) {
     event.preventDefault();
-    const currentHoverIndex = this.hoverIndex; // Capture hover index before using it
+    const currentHoverIndex = this.hoverIndex; 
     
     if (!event.dataTransfer) {
-        this.hoverIndex = null; // Reset if drop is invalid early
+        this.hoverIndex = null; 
         return;
     }
     const text = event.dataTransfer.getData('text/plain');
     if (!text) {
-        this.hoverIndex = null; // Reset if drop is invalid early
+        this.hoverIndex = null; 
         return;
     }
 
     const wordItem = this.availableWords.find(w => w.text === text && !w.used);
-    // Use the captured hover index for insertion point calculation
     const insertIndex = currentHoverIndex !== null ? currentHoverIndex : this.sentenceWords.length;
 
-    if (this.draggedSentenceWordIndex !== null) { // Word came from the sentence (reordering)
-         // Check if index is valid before accessing sentenceWords
+    if (this.draggedSentenceWordIndex !== null) { 
          if (this.draggedSentenceWordIndex >= 0 && this.draggedSentenceWordIndex < this.sentenceWords.length) {
              const wordToMove = this.sentenceWords[this.draggedSentenceWordIndex];
-             if (wordToMove === text) { // Verify it's the correct word being dropped
+             if (wordToMove === text) { 
                  this.sentenceWords.splice(this.draggedSentenceWordIndex, 1);
-                 // Adjust insert index if the removal affected it
                  const adjustedInsertIndex = (this.draggedSentenceWordIndex < insertIndex) ? insertIndex - 1 : insertIndex;
                  this.sentenceWords.splice(adjustedInsertIndex, 0, text);
              } else {
                  console.error("Mismatched word during sentence reorder drop.");
-                 // If mismatch, maybe don't do anything or log error. The word wasn't removed yet.
              }
          } else {
               console.error("Invalid draggedSentenceWordIndex during drop.");
          }
-    } else if (wordItem) { // Word came from the bank
+    } else if (wordItem) { 
         wordItem.used = true;
         this.sentenceWords.splice(insertIndex, 0, text);
     }
     
-    // Clear drag state and hover index AFTER processing drop
     this.draggedWord = null; 
     this.draggedSentenceWordIndex = null; 
     this.hoverIndex = null; 
@@ -759,45 +671,38 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   }
 
   onSubmit() {
-    // Process sentence for prefixes/suffixes
     let finalSentenceParts: string[] = [];
     for (let i = 0; i < this.sentenceWords.length; i++) {
       const currentWord = this.sentenceWords[i];
       const prevWord = finalSentenceParts.length > 0 ? finalSentenceParts[finalSentenceParts.length - 1] : null;
       const nextWord = i + 1 < this.sentenceWords.length ? this.sentenceWords[i + 1] : null;
 
-      if (currentWord.startsWith('-')) { // It's a suffix
-        const suffix = currentWord.substring(1); // Remove leading '-'
+      if (currentWord.startsWith('-')) { 
+        const suffix = currentWord.substring(1); 
         if (prevWord && finalSentenceParts.length > 0) {
-          // Append to the previous part if it's not already a prefix/suffix
            if (!prevWord.endsWith('-') && !prevWord.startsWith('-')) {
                finalSentenceParts[finalSentenceParts.length - 1] += suffix; 
            } else {
-                finalSentenceParts.push(suffix); // Add suffix as its own word if previous was prefix/suffix
+                finalSentenceParts.push(suffix); 
            }
         } else {
-          finalSentenceParts.push(suffix); // Add suffix as its own word if it's the first word
+          finalSentenceParts.push(suffix); 
         }
-      } else if (currentWord.endsWith('-')) { // It's a prefix
-        const prefix = currentWord.substring(0, currentWord.length - 1); // Remove trailing '-'
-        if (nextWord && !nextWord.startsWith('-')) { // Check if next word exists and is not a suffix
-          // Prepend to the next word and add the combined word now, skip next word iteration
+      } else if (currentWord.endsWith('-')) { 
+        const prefix = currentWord.substring(0, currentWord.length - 1); 
+        if (nextWord && !nextWord.startsWith('-')) { 
           finalSentenceParts.push(prefix + nextWord);
-          i++; // Skip the next word since we've combined it
+          i++; 
         } else {
-          finalSentenceParts.push(prefix); // Add prefix as its own word
+          finalSentenceParts.push(prefix); 
         }
-      } else { // It's a regular word
+      } else { 
         finalSentenceParts.push(currentWord);
       }
     }
-
-    this.generatedSentence = finalSentenceParts.join(' '); // Join with spaces
-
-    // Send the processed sentence to the server
+    this.generatedSentence = finalSentenceParts.join(' '); 
     this.signalRService.submitSentence(this.generatedSentence)
         .catch(err => console.error("Error submitting sentence:", err));
-    // Optionally disable button after submitting
   }
 
   hasPlayerSubmitted(playerName: string): boolean {
@@ -818,32 +723,27 @@ export class RoomViewComponent implements OnInit, OnDestroy {
   }
 
    updateAvailableWords(wordsFromState: string[]) {
-       console.log("updateAvailableWords received from server:", wordsFromState); // Log received words
-       // Reset used status based on current sentence and available words from state
+       console.log("updateAvailableWords received from server:", wordsFromState); 
        this.availableWords = wordsFromState.map(wordText => ({
            text: wordText,
            used: this.sentenceWords.includes(wordText)
        }));
    }
 
-   // Method to call the service for readying up
    readyUp() {
        this.signalRService.readyUp()
            .catch(err => console.error("Error calling readyUp:", err));
-       // Optionally disable button immediately after click
    }
 
-   // Helper to check if a player is in the ready list
    isPlayerReady(playerName: string): boolean {
        return !!this.gameState?.readyPlayers?.includes(playerName);
    }
 
-   // Method to send chat message
    sendMessage() {
        if (this.newMessage.trim()) {
            this.signalRService.sendMessage(this.newMessage.trim())
                .then(() => {
-                   this.newMessage = ''; // Clear input on success
+                   this.newMessage = ''; 
                })
                .catch(err => console.error("Error sending message:", err));
        }
